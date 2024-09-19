@@ -1,1 +1,1 @@
-# EventMentor
+This event management system is built with .NET 5 using Blazor for the front-end and a SQL database for data storage. Blazor enables a responsive, interactive user interface, while the SQL database efficiently manages event details, user registrations, and administrative settings. The system offers features like event creation, registration management, real-time updates, and an admin dashboard for overseeing event logistics.
