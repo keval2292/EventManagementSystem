@@ -1,0 +1,16 @@
+.mud-input-control.mud-select {
+    min-width: 300px !important;
+}
+
+/*body {
+    background-color: #594ae24f!important;
+}*/
+.Admin {
+    background-color: #594ae24f !important;
+}
+.website {
+    background-color: #757575;
+}
+b {
+    font-family:  'Inconsolata', monospace;
+}

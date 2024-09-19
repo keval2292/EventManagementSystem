@@ -1,0 +1,36 @@
+﻿@inject IUserRepository _UserRepository;
+
+<MudCard Elevation="0" Square="true" Class="@Class" Style="@Style">
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            @foreach (var data in Getuser())
+            {
+                firstname = data.FullName.ToCharArray();
+            <MudAvatar Color="Color.Primary">@firstname[0]</MudAvatar>
+            }
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            @foreach (var data in Getuser())
+            {
+            <MudText Typo="Typo.body2">@data.FullName</MudText>
+            <MudText Typo="Typo.caption">@data.Userrole</MudText>
+            }
+        </CardHeaderContent>
+    </MudCardHeader>
+</MudCard>
+
+@code { 
+
+
+            public char[] firstname { get; set; }
+            [Parameter] public string Class { get; set; }
+            [Parameter] public string Style { get; set; }
+            [CascadingParameter(Name = "cascadeParameters")]
+            public GlobalParameter _parameters { get; set; }
+            public string Isshow { get; set; }
+            private List<User> Getuser()
+            {
+                return _UserRepository.GetById(_parameters.UserId);
+            }
+
+    }

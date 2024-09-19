@@ -1,0 +1,534 @@
+﻿@page "/eventlist"
+@attribute [Authorize(Roles = "Admin, Operator")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@using EMS.DB.Constant
+@using System.IO;
+@using System.Net
+@using System.Net.Mail
+@using EventMentorSystem.Shared
+@inject IEventRepository _EventRepository;
+@inject IOperatorRepository _OperatorRepository;
+@inject ISnackbar Snackbar;
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject NavigationManager UriHelper
+
+@if (IsEdit || IsAdd)
+{
+    <EditForm Model="@eventModel" OnValidSubmit="Save">
+        <DataAnnotationsValidator />
+        <MudCard Elevation="25" Class="my-2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Add / Edit Events</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="CancelForm"></MudIconButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudItem>
+                    <MudTextField @bind-Value="eventModel.EventName" For="@(() => eventModel.EventName)" Label="Event Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudSelect @bind-Value="eventModel.OperatorId" For="@(() => eventModel.OperatorId)" Label="Operator Name" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var data in OperatorList)
+                            {
+                            <MudSelectItem Value="@data.Id">@data.User.FullName</MudSelectItem>
+                            }
+                    </MudSelect>
+                    <MudTextField @bind-Value="eventModel.EventVenue" For="@(() => eventModel.EventVenue)" Label="Event Venue" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="eventModel.OrganizerName" For="@(() => eventModel.OrganizerName)" Label="Organizer Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="eventModel.Email" For="@(() => eventModel.Email)" Label="Email" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="eventModel.OrganizerContact" For="@(() => eventModel.OrganizerContact)" Label="Organizer Contact" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudRadioGroup @bind-SelectedOption="@eventModel.SlotType" For="@(() => eventModel.SlotType)" Required="true" RequiredError="this files required">
+                        <MudText>Select Slot Type:</MudText>
+                        <MudRadio Option="@(EventSlotType.Morning.ToString())" Color="Color.Primary">@EventSlotType.Morning.ToString()</MudRadio>
+                        <MudRadio Option="@(EventSlotType.Evening.ToString())" Color="Color.Primary">@EventSlotType.Evening.ToString()</MudRadio>
+                        <MudRadio Option="@(EventSlotType.FullDay.ToString())" Color="Color.Primary">@EventSlotType.FullDay.ToString()</MudRadio>
+                        <MudRadio Option="@(EventSlotType.MultipleDay.ToString())" Color="Color.Primary">@EventSlotType.MultipleDay.ToString()</MudRadio>
+                    </MudRadioGroup>
+                    @if (eventModel is not null && eventModel.FromDate is null)
+                    {
+                        eventModel.FromDate = DateTime.Today.AddDays(7);
+                    }
+                    <MudDatePicker Variant="Variant.Outlined" For="@(() => eventModel.FromDate)" Label="From Date" @bind-Date="eventModel.FromDate" DateFormat="dd.MM.yyyy" />
+                    @if (eventModel.SlotType == EventSlotType.MultipleDay.ToString())
+                    {
+                        <MudDatePicker Variant="Variant.Outlined" Label="To Date" For="@(() => eventModel.Todate)" @bind-Date="eventModel.Todate" DateFormat="dd.MM.yyyy" />
+                    }
+                    <MudTextField @bind-Value="eventModel.Description" For="@(() => eventModel.Description)" Label="Description" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudSelect @bind-Value="eventModel.CategoryId" For="@(() => eventModel.CategoryId)" Label="Select categorys" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var eventCategory in GetEventCategoryList())
+                            {
+                            <MudSelectItem Value="@eventCategory.Id">@eventCategory.CategoryName</MudSelectItem>
+                            }
+                    </MudSelect>
+                    <MudSwitch @bind-Checked="eventModel.IsApproved" For="@(() => eventModel.IsApproved)" Color="Color.Primary" Label="Approved?" />
+                </MudItem>
+                <MudItem Class="d-flex justify-end">
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelForm">
+                        <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                    </MudButton>
+                    <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary">
+                        <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                    </MudButton>
+                </MudItem>
+            </MudCardContent>
+        </MudCard>
+    </EditForm>
+}
+else
+{
+    <AuthorizeView Roles="Admin">
+        <MudItem Class="d-flex justify-end my-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary " OnClick="ShowAddForm" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+                <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+            </MudButton>
+        </MudItem>
+    </AuthorizeView>
+}
+
+<AuthorizeView Roles="Admin">
+    <MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<Event>>>(ServerReload))" T="Event" Filter="new Func<Event, bool>(Search)" Class="w-100" @bind-customer="eventList" OnRowClick="@RowClicked">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6"><b>Events</b></MudText>
+            <MudSpacer />
+            <MudTextField Value="searchString" T="string" ValueChanged="@(s=> OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Action</MudTh>
+            <MudTh>Event(#Id)</MudTh>
+            <MudTh>Operator</MudTh>
+            <MudTh>Venue</MudTh>
+            <MudTh>Organizor(#Contact)</MudTh>
+            @*<MudTh>Description</MudTh>*@
+            <MudTh>SlotType</MudTh>
+            <MudTh>Event date</MudTh>
+            <MudTh>Approved</MudTh>
+            <MudTh>Payment</MudTh>
+            <MudTh>Reference</MudTh>
+            <MudTh>Category</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="data">
+            <MudTd DataLabel="">
+                <MudFab @onclick="@(() => Edit(@data))" Color="Color.Primary" Icon="@Icons.Material.Filled.RemoveRedEye" Size="Size.Small" IconSize="Size.Small" />
+                <MudFab @onclick="@(() => Delete(@data.Id))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+            </MudTd>
+            <MudTd DataLabel="Event Name">@(string.Concat("(#", @data.Id,") "))@data.EventName</MudTd>
+
+            <MudTd DataLabel="">@data.Operator.User.FullName</MudTd>
+            <MudTd DataLabel="">@data.EventVenue</MudTd>
+            <MudTd DataLabel="">@data.OrganizerName@(string.Concat("(#", @data.OrganizerContact, ") "))</MudTd>
+            <MudTd DataLabel="">@data.SlotType</MudTd>
+            <MudTd DataLabel="">
+                @data.FromDate?.ToLongDateString()
+                @if (@data.Todate.HasValue)
+                {
+                    @(" To ")
+                    @data.Todate?.ToLongDateString()
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.IsApproved)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.Ispaymentdone)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.InquiryId > 0)
+                {
+                    @("By Inquiry Form")
+                }
+                else
+                {
+                    @("By Call")
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (@data.Category is not null)
+                {
+                    @data.Category.CategoryName
+                }
+                else
+                {
+                    @("----")
+                }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+        </PagerContent>
+    </MudTable>
+</AuthorizeView>
+
+<AuthorizeView Roles="Operator">
+
+    <MudTable Elevation="25"  @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<Event>>>(ServerReloadForOprator))" T="Event" Filter="new Func<Event, bool>(Search)" Class="w-100 mt-3" @bind-customer="eventList" OnRowClick="@RowClicked">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6"><b>Events</b></MudText>
+            <MudSpacer />
+            <MudTextField Value="searchString" T="string" ValueChanged="@(s=> OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Action</MudTh>
+            <MudTh>Event(#Id)</MudTh>
+            <MudTh>Operator</MudTh>
+            <MudTh>Venue</MudTh>
+            <MudTh>Organizer(#Contact)</MudTh>
+            @*<MudTh>Description</MudTh>*@
+            <MudTh>Slot Type</MudTh>
+            <MudTh>Event date</MudTh>
+            <MudTh>Approved</MudTh>
+            <MudTh>Payment</MudTh>
+            <MudTh>Reference</MudTh>
+            <MudTh>Category</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="data">
+            <MudTd DataLabel="">
+                <MudFab @onclick="@(() => Edit(@data))" Color="Color.Primary" Icon="@Icons.Material.Filled.RemoveRedEye" Size="Size.Small" IconSize="Size.Small" />
+            </MudTd>
+            <MudTd DataLabel="Event Name">@(string.Concat("(#", @data.Id,") "))@data.EventName</MudTd>
+            <MudTd DataLabel="">@data.Operator.User.FullName</MudTd>
+            <MudTd DataLabel="">@data.EventVenue</MudTd>
+            <MudTd DataLabel="">@data.OrganizerName@(string.Concat("(#", @data.OrganizerContact, ")"))</MudTd>
+            <MudTd DataLabel="">@data.SlotType</MudTd>
+            <MudTd DataLabel="">
+                @data.FromDate?.ToLongDateString()
+                @if (@data.Todate.HasValue)
+                {
+                    @(" To ")
+                    @data.Todate?.ToLongDateString()
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.IsApproved)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.Ispaymentdone)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.InquiryId > 0)
+                {
+                    @("By Inquiry Form")
+                }
+                else
+                {
+                    @("By Call")
+                }
+            </MudTd>
+            <MudTd DataLabel="">
+                @if (data.CategoryId > 0)
+                {
+                    @data.Category.CategoryName
+                }
+                else
+                {
+                    @("----")
+                }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+        </PagerContent>
+    </MudTable>
+</AuthorizeView>
+
+@code{
+    [CascadingParameter]
+    public Error Error { get; set; }
+
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private HubConnection hubConnection;
+    //    AppDomain.CurrentDomain.BaseDirectory
+    string EventDetailsEmailTemplate = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "MailTemplate", "EventDetails.html");
+
+    private string searchString = "";
+    private Event eventModel = new();
+    private NotificationMessages NotificationMessagesModel = new();
+    private MudTable<Event> tableRef;
+    private IEnumerable<Event> pagedData;
+    private bool IsEdit;
+    private bool IsAdd;
+    private int totalItems;
+    private int totalItemsOperator;
+    private List<Event> eventList = new();
+    private List<Event> EventList = new();
+    private List<EventCategory> eventcategoryList = new();
+    private List<Operator> OperatorList = new();
+    private string userId;
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAllevents();
+            GetOperatorlist();
+            StateHasChanged();
+        }
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    [Inject]
+    public AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationState authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (authState.User.Identity is { IsAuthenticated: true })
+        {
+            string nameIdentifier = authState.User.Identity.Name;
+            if (!string.IsNullOrEmpty(nameIdentifier))
+            {
+                var userIdClaim = authState.User.Claims.Where(c => c.Type == "UserId").FirstOrDefault();
+                if (userIdClaim != null)
+                {
+                    userId = userIdClaim.Value;
+                }
+                else
+                {
+                    var claim = authState.User.Claims.Where(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").FirstOrDefault();
+                    if (claim != null)
+                    {
+                        userId = claim.Value;
+                    }
+                }
+            }
+        }
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Event>("EventAddUpdate", (events) =>
+        {
+            GetAllforopertor();
+            GetAllevents();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+    private List<Event> GetAllevents()
+    {
+        tableRef.ReloadServerData();
+        eventList = _EventRepository.GetList();
+        return eventList;
+    }
+    private List<Event> GetAllforopertor()
+    {
+        tableRef.ReloadServerData();
+        EventList = _EventRepository.GetByOpertorId(userId);
+        return EventList;
+    }
+    private bool Search(Event events)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString) && StringValid(events.EventName)
+            && StringValid(events.OperatorId.ToString())
+            && StringValid(events.EventVenue)
+            && StringValid(events.OrganizerName)
+            && StringValid(events.OrganizerContact)
+            && StringValid(events.Description)
+            &&
+            events.EventName.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || events.OperatorId.ToString().Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || events.EventVenue.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || events.OrganizerName.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || events.OrganizerContact.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+    public void RowClicked(TableRowClickEventArgs<Event> p)
+    {
+        NavigationManager.NavigateTo($"/EditEvent/{p.Item.Id.ToString()}");
+    }
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+        return false;
+    }
+    private async Task<TableData<Event>> ServerReload(TableState state)
+    {
+        IEnumerable<Event> data;
+        data = _EventRepository.GetList();
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        data = data.OrderByDirection(state.SortDirection, o => o.Id);
+        totalItemsOperator = data.Count();
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<Event>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+    private async Task<TableData<Event>> ServerReloadForOprator(TableState state)
+    {
+        IEnumerable<Event> data;
+        data = _EventRepository.GetByOpertorId(userId);
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+
+        totalItemsOperator = data.Count();
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<Event>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+    private async Task Save()
+    {
+        try
+        {
+            _EventRepository.Insert(eventModel);
+            Snackbar.Add(" record saved", Severity.Success);
+            IsEdit = false;
+            IsAdd = false;
+            await hubConnection.SendAsync("EventAddUpdate", eventModel);
+            tableRef.ReloadServerData();
+            NotificationMessagesModel.Message = $"Event {eventModel.EventName} Added by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole}) ";
+            NotificationMessagesModel.Title = "Add Event";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = eventModel.Id;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            Sendmail(eventModel.Email, eventModel.Id);
+            eventModel = new Event();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void ShowAddForm()
+    {
+        eventModel = new Event();
+        IsAdd = true;
+    }
+    private void Edit(Event events)
+    {
+        UriHelper.NavigateTo($"/EditEvent/{events.Id.ToString()}");
+        tableRef.ReloadServerData();
+    }
+    public List<Operator> operatorlist = new();
+    public string name { get; set; }
+    private void Operatorname(long id)
+    {
+        operatorlist = _OperatorRepository.GetById(id);
+        foreach (var data in operatorlist)
+        {
+            name = data.User.FullName;
+        }
+    }
+    private List<EventCategory> GetEventCategoryList()
+    {
+        return _EventCategoryRepository.GetList();
+    }
+    private List<Operator> GetOperatorlist()
+    {
+        OperatorList = _OperatorRepository.GetLists();
+        StateHasChanged();
+        return OperatorList;
+    }
+    private void CancelForm()
+    {
+        try
+        {
+            IsEdit = false;
+            IsAdd = false;
+            eventModel = new Event();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private async Task Delete(long id)
+    {
+        try
+        {
+
+            _EventRepository.Delete(id);
+            await hubConnection.SendAsync("EventAddUpdate", eventModel);
+            NotificationMessagesModel.Message = $"Event {eventModel.EventName} deleted by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole})";
+            NotificationMessagesModel.Title = "Delete Event";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = eventModel.Id;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            Snackbar.Add("Customer Data Deleted.", Severity.Success);
+            tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+    private string Message { get; set; } = "";
+    private void Sendmail(string email, long id)
+    {
+        try
+        {
+            using (MailMessage mail = new MailMessage())
+            {
+                mail.From = new MailAddress("eventmentor3@gmail.com");
+                mail.To.Add(@email);
+                mail.Subject = "Event Details.";
+
+                var str = File.ReadAllText(EventDetailsEmailTemplate);
+
+                string eventlink = "https://localhost:44304/eventdetail/" + StringCipher.Encode(Convert.ToString(id));
+
+                mail.Body = str.Replace("{{EVENTDETAILSLINK}}", eventlink);
+                mail.IsBodyHtml = true;
+
+
+                using (SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587))
+                {
+                    smtp.Credentials = new NetworkCredential("eventmentor3@gmail.com", "ifjwikzwvsguvksb");
+                    smtp.EnableSsl = true;
+                    smtp.Send(mail);
+                }
+            }
+            Message = "email was sent successfully!";
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+
+}

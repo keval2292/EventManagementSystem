@@ -1,0 +1,84 @@
+﻿@page "/userlist"
+@attribute [Authorize(Roles = "Admin")]
+@using EMS.DB.Constant
+@inject NavigationManager NavigationManager;
+
+
+@if (IsAdd)
+{
+    <UserForm OnCancelEvent="ShowHideAddForm" />
+}
+else if (IsEdit)
+{
+    <EditForm Model="@userModel" OnValidSubmit="Save">
+        <DataAnnotationsValidator />
+        <MudCard Elevation="25" Class="my-2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Add User</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="Cancel" Size="Size.Large"></MudIconButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudItem>
+                    <MudTextField @bind-Value="userModel.FullName" For="@(() => userModel.FullName)" Label="User Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="userModel.ContactNo" For="@(() => userModel.ContactNo)" Label="User contactno" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="userModel.Useraddress" For="@(() => userModel.Useraddress)" Label="Address" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="userModel.Email" Validation="@(new Func<string, IEnumerable<string>>(Emailaddress))" Label="User email" Variant="Variant.Outlined" Margin="Margin.Normal" Required="true" RequiredError="Email is required!"></MudTextField>
+                    <MudSelect @bind-Value="userModel.Userrole" For="@(() => userModel.Userrole)" Label="User role" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem Value="@(Userrole.Admin.ToString())">@Userrole.Admin.ToString()</MudSelectItem>
+                        <MudSelectItem Value="@(Userrole.Staff.ToString())">@Userrole.Staff.ToString()</MudSelectItem>
+                        <MudSelectItem Value="@(Userrole.Operator.ToString())">@Userrole.Operator.ToString()</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem Class="d-flex justify-end my-2">
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="Cancel" Size="Size.Large">
+                        <FontLabel Fontweight="500" FontColor="white">Reset</FontLabel>
+                    </MudButton>
+                    <MudButton Class="mx-1" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">
+                        <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                    </MudButton>
+                </MudItem>
+            </MudCardContent>
+        </MudCard>
+    </EditForm>
+}
+else
+{
+    <MudItem Class="d-flex justify-end my-2">
+        <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowHideAddForm" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+            <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+        </MudButton>
+    </MudItem>
+
+    <MudTable @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<User>>>(ServerReload))" T="User" Filter="new Func<User, bool>(Search)" Hover="true">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6"><b>Users</b></MudText>
+            <MudSpacer />
+            <MudTextField Value="searchString" T="string" ValueChanged="@(s => OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Role</MudTh>
+            <MudTh>ContactNo</MudTh>
+            <MudTh>joining date</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.FullName</MudTd>
+            <MudTd>@context.Email</MudTd>
+            <MudTd>@context.Userrole</MudTd>
+            <MudTd>@context.ContactNo</MudTd>
+            <MudTd>@context.UserJoiningDate.ToLongDateString()</MudTd>
+            <MudTd DataLabel="">
+                <MudFab @onclick="@(() => Edit(@context.Id))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+        </PagerContent>
+    </MudTable>
+} 

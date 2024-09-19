@@ -1,0 +1,21 @@
+<Error>
+    <CascadingAuthenticationState>
+        <Router AppAssembly="@typeof(Program).Assembly" PreferExactMatches="@true">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                    <NotAuthorized>
+                        <MudText Typo="Typo.h5" Align="Align.Center" Class="mx-1">Sorry, you're not authorized to reach this page.</MudText>
+                        <MudText Typo="Typo.h5" Align="Align.Center" Class="mx-1">You may need to log in as a different user.</MudText>
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+            </Found>
+            <NotFound>
+                <LayoutView Layout="@typeof(MainLayout)">
+                    <p>Sorry, there's nothing at this address.</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </CascadingAuthenticationState>
+</Error>
+
+

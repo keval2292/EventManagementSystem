@@ -1,0 +1,161 @@
+﻿@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@inject IEventRepository _eventService;
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject IOperatorRepository _OperatorRepository;
+@inject ICategoryServiceRepository _CategoryServiceRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject ISnackbar Snackbar;
+@inject NavigationManager NavigationManager; 
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem>
+                <CustomMudSelect PlaceHolder="Select Service" MultiSelection="true" Variant="Variant.Outlined" Class="mb-2" Value="@eventModel.SelectedService"
+                                 ValueChangedCallBack="@(e => OnSelectedPriorityChange(e))" SelectedValues="selectedServiceList">
+                    <MudSelectItems>
+                        @foreach (var Service in GetAllService())
+                        {
+                            <MudSelectItem T="string" Value="@Service.ServiceName.ToString()">@Service.ServiceName</MudSelectItem>
+                        }
+                    </MudSelectItems>
+                </CustomMudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddService">Add Service</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter]
+    public GlobalParameter _parameters { get; set; }
+    [Parameter] public Event EventModel { get; set; } = new Event();
+    private Event eventModel = new();
+    private bool isReadOnly = false;
+    private EventCategory EventCategoryName = new();
+    private CategoryService CategoryServiceModel = new();
+    private List<CategoryService> ServiceList = new();
+    private List<EventCategory> EventCategoryList = new();
+    private List<Operator> operatorlist = new();
+    public string name { get; set; }
+    List<String> selectedServiceList = new List<String>();
+    List<long> selectedServiceIdList = new List<long>();
+    private HubConnection hubConnection;
+
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+
+    
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Event>("EventAddUpdate", (events) =>
+        {
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (EventModel is not null && EventModel.Id > 0)
+            {
+                isReadOnly = true;
+            }
+            eventModel = EventModel;
+
+            EventCategoryName = _EventCategoryRepository.GetById(EventModel.CategoryId);
+            GetEventCategoryList();
+            //GetCategoryServices();
+            GetAllService();
+            StateHasChanged();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+    public void OnEventCategoryChange(long selectedEventCategoryId)
+    {
+    }
+    private void GetEventCategoryList()
+    {
+        EventCategoryList = _EventCategoryRepository.GetList();
+    }
+    private List<CategoryService> GetAllService()
+    {
+        ServiceList = _CategoryServiceRepository.GetList();
+        return ServiceList;
+    }
+    private void Operatorname()
+    {
+        operatorlist = _OperatorRepository.GetById(eventModel.OperatorId);
+        foreach (var data in operatorlist)
+        {
+            name = data.User.FullName;
+        }
+    }
+    void Cancel() => MudDialog.Close(DialogResult.Ok(false));
+    private async Task AddService()
+    {
+        try
+        {
+            _eventService.Update(eventModel);
+            await hubConnection.SendAsync("EventAddUpdate", eventModel);
+            NotificationMessagesModel.Message = $"Event {eventModel.EventName} added services by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole}).";
+            NotificationMessagesModel.Title = "add service";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = eventModel.Id;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            eventModel = new Event();
+            MudDialog.Close();
+            Snackbar.Add("add service successfully.", Severity.Success);
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private string GetSelectedServices()
+    {
+        return eventModel.SelectedService;
+        //return eventModel.SelectedService.Split(',').Where(x    => string.IsNullOrEmpty(x)).ToList();
+    }
+
+    //IEnumerable<long>
+    private IEnumerable<long> OnSetSelectedServices(IEnumerable<long> values)
+    {
+        return eventModel.SelectedService.Split(',').Select(x => Convert.ToInt64(x)).ToList();
+    }
+
+    private void OnSelectedPriorityChange(string selectedValue)
+    {
+        if (!string.IsNullOrEmpty(selectedValue))
+        {
+
+            selectedServiceList = selectedValue.Split(",").Select(val => val.Trim()).ToList();
+            var listing = selectedValue.Split(",").Select(val => val.Trim()).ToList();
+            var strq = "";
+            var d1 = GetAllService().Where(x => listing.Contains(x.ServiceName)).ToList().Select(x => x.Id).ToList();
+            strq = string.Join(",", d1);
+            eventModel.SelectedService = selectedValue;
+        }
+        else
+        {
+            eventModel.SelectedService = string.Empty;
+            selectedServiceList = new List<string>();
+        }
+    }
+}

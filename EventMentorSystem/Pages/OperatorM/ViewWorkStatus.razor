@@ -1,0 +1,72 @@
+﻿@using EMS.DB.Models
+@using EMS.DB.Constant
+@using  EMS.DB.Repository.Interface
+@inject IEventStaffWorkRepository _EventStaffWorkRepository;
+@inject ISnackbar Snackbar;
+
+
+<MudDialog>
+    <DialogContent>
+        @if (eventStaffWorkModelModel.Status == Status.pending.ToString())
+        {
+            <MudTimeline Class="mb-3" TimelineOrientation=" TimelineOrientation.Horizontal">
+                <MudTimelineItem Color="Color.Error" Variant="Variant.Filled" Class="mb-3 mt-0">
+                    <ItemContent>
+                        <MudAlert    Severity="Severity.Error">@eventStaffWorkModelModel.Status</MudAlert>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Warning" Variant="Variant.Filled">
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Success" Variant="Variant.Filled">
+                </MudTimelineItem>
+            </MudTimeline>
+        }
+        else if (eventStaffWorkModelModel.Status == Status.OnProcess.ToString())
+        {
+            <MudTimeline Class="mb-3" TimelineOrientation=" TimelineOrientation.Horizontal">
+                <MudTimelineItem Color="Color.Error" Variant="Variant.Filled">
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Warning" Variant="Variant.Filled"  >
+                    <ItemContent>
+                        <MudAlert Severity="Severity.Warning">@eventStaffWorkModelModel.Status</MudAlert>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Success" Variant="Variant.Filled">
+                </MudTimelineItem>
+            </MudTimeline>
+
+        }
+        else
+        {
+            <MudTimeline Class="mb-3" TimelineOrientation=" TimelineOrientation.Horizontal">
+                <MudTimelineItem Color="Color.Error" Variant="Variant.Filled">
+
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Warning" Variant="Variant.Filled">
+
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Success" Variant="Variant.Filled" Class="mb-3 mt-0">
+                    <ItemContent>
+                        <MudAlert Severity="Severity.Success">@eventStaffWorkModelModel.Status</MudAlert>
+                    </ItemContent>
+                </MudTimelineItem>
+            </MudTimeline>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public EventStaffWork EventStaffWorkModel { get; set; } = new EventStaffWork();
+    private EventStaffWork eventStaffWorkModelModel = new();
+    protected override void OnInitialized()
+    {
+        eventStaffWorkModelModel = EventStaffWorkModel;
+        base.OnInitialized();
+    }
+    private void CancelForm()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+        eventStaffWorkModelModel = new EventStaffWork();
+    }
+}

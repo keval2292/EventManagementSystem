@@ -1,0 +1,213 @@
+﻿@page "/viewstaffworklist"
+@attribute [Authorize(Roles = "Staff")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@inject IEventStaffWorkRepository _EventStaffWorkRepository;
+@inject IStaffRepository _StaffRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject ISnackbar Snackbar;
+@inject NavigationManager NavigationManager;
+@inject IDialogService DialogService;
+@using EMS.DB.Constant
+
+<MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<EventStaffWork>>>(ServerReload))" T="EventStaffWork" Filter="new Func<EventStaffWork, bool>(Search)" Class="w-100 mt-3" @bind-customer="EventStaffWorkList">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Worklist</MudText>
+        <MudSpacer />
+        <MudTextField Value="searchString" T="string" ValueChanged="@(s=> OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Action</MudTh>
+        <MudTh>Id</MudTh>
+        <MudTh>Event</MudTh>
+        <MudTh>Venue</MudTh>
+        <MudTh>From Date</MudTh>
+        <MudTh>Slot</MudTh>
+        <MudTh>Service</MudTh>
+        <MudTh>Description</MudTh>
+        <MudTh>Status</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+
+        <MudTd>
+            <MudFab @onclick="@(() => OpenDialog(context))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small">
+                edit
+            </MudFab>
+        </MudTd>
+        <MudTd DataLabel="Id">@context.Id</MudTd>
+        <MudTd DataLabel="Id">@context.Event.EventName</MudTd>
+        <MudTd DataLabel="Id">@context.Event.EventVenue</MudTd>
+        <MudTd DataLabel="Id">@context.Event.FromDate?.ToLongDateString()</MudTd>
+        <MudTd DataLabel="Id">@context.Event.SlotType</MudTd>
+        <MudTd DataLabel="Id">@context.Service</MudTd>
+        <MudTd DataLabel="Id">@context.Description</MudTd>
+        <MudTd DataLabel="Id">
+            @if (context.Status == Status.pending.ToString())
+            {
+<MudAlert Severity="Severity.Error">@context.Status</MudAlert> }
+                    else if (context.Status == Status.OnProcess.ToString())
+                    {
+<MudAlert Severity="Severity.Warning">@context.Status</MudAlert> }
+                    else
+                    {
+<MudAlert Severity="Severity.Success">@context.Status</MudAlert>                    }
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+    </PagerContent>
+</MudTable>
+@code{
+    private string searchString = "";
+    private List<EventStaffWork> EventStaffWorkList = new();
+    private List<Staff> staffList = new();
+    private EventStaffWork EventStaffWorkModel = new();
+    private MudTable<EventStaffWork> tableRef;
+    private IEnumerable<EventStaffWork> pagedData;
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private HubConnection hubConnection;
+    private bool IsEdit;
+    private bool IsAdd;
+    private bool IsStatus;
+    private int totalItems;
+    private int totalItemsOperator;
+    private string userId;
+
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+
+    [Inject]
+    public AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationState authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (authState.User.Identity is { IsAuthenticated: true })
+        {
+            string nameIdentifier = authState.User.Identity.Name;
+            if (!string.IsNullOrEmpty(nameIdentifier))
+            {
+                var userIdClaim = authState.User.Claims.Where(c => c.Type == "UserId").FirstOrDefault();
+                if (userIdClaim != null)
+                {
+                    userId = userIdClaim.Value;
+                }
+                else
+                {
+                    var claim = authState.User.Claims.Where(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").FirstOrDefault();
+                    if (claim != null)
+                    {
+                        userId = claim.Value;
+                    }
+                }
+            }
+        }
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+            .Build();
+
+        hubConnection.On<EventStaffWork>("EventAddUpdate", (events) =>
+        {
+            tableRef.ReloadServerData();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+   
+    private bool Search(EventStaffWork EventStaffWorks)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(EventStaffWorks.Service)
+            && StringValid(EventStaffWorks.Description)
+            && StringValid(EventStaffWorks.Status)
+            &&
+            EventStaffWorks.Service.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || EventStaffWorks.Description.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || EventStaffWorks.Status.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TableData<EventStaffWork>> ServerReload(TableState state)
+    {
+        IEnumerable<EventStaffWork> data;
+        data = _EventStaffWorkRepository.GetListByStaff(userId);
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItemsOperator = data.Count();
+
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<EventStaffWork>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+
+    private void CancelForm()
+    {
+        try
+        {
+            IsEdit = false;
+            IsAdd = false;
+            EventStaffWorkModel = new EventStaffWork();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void Edit(long id)
+    {
+
+        try
+        {
+            EventStaffWorkModel = EventStaffWorkList.FirstOrDefault(c => c.Id == id);
+            IsEdit = true;
+            tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void OpenDialog(EventStaffWork EventStaffWork)
+    {
+
+        var parameters = new DialogParameters();
+        parameters.Add("EventStaffWorkModel", EventStaffWork);
+        parameters.Add("_parameters", _parameters);
+        parameters.Add("userId", userId);
+        var options = new DialogOptions()
+        {
+            CloseOnEscapeKey = false,
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            Position = DialogPosition.TopCenter,
+            DisableBackdropClick = true
+
+        };
+
+        DialogService.Show<StaffWorkProcess>("Work Status", parameters, options);
+
+    }
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+
+    }
+
+    }

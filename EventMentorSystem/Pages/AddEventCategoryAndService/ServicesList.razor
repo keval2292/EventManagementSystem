@@ -1,0 +1,205 @@
+﻿@page "/servicelist"
+@attribute [Authorize(Roles = "Admin, Operator")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@using System.Collections.Generic;
+@inject ISnackbar Snackbar;
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject ICategoryServiceRepository _CategoryServiceRepository;
+@inject NavigationManager _NavigationManager
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@using Microsoft.AspNetCore.SignalR.Client
+
+<EditForm Model="@ServiceModel">
+    <DataAnnotationsValidator />
+    <MudCard Elevation="25" Class="my-2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6"><b>Add / Edit Service</b></MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudItem>
+                <MudTextField @bind-Value="ServiceModel.ServiceName" For="@(() => ServiceModel.ServiceName)" Label="Service Name" Variant="Variant.Outlined" HelperText="@error" Error="@showLeaveAlert" Margin="Margin.Normal"></MudTextField>
+            </MudItem>
+            <MudItem Class="d-flex justify-end">
+                <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary" OnClick="Save" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+                    <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                </MudButton>
+            </MudItem>
+        </MudCardContent>
+    </MudCard>
+</EditForm>
+<MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<CategoryService>>>(ServerReload))" Filter="new Func<CategoryService, bool>(Search)">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6"><b>Services </b></MudText>
+        <MudSpacer />
+        <MudTextField Value="searchString" T="string" ValueChanged="@(s=> OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Id</MudTh>
+        <MudTh>Service Name</MudTh>
+        <MudTh>Action</MudTh>
+    </HeaderContent>
+    <RowTemplate Context="data">
+        <MudTd DataLabel="Id">@data.Id</MudTd>
+        <MudTd DataLabel="Service Name">@data.ServiceName</MudTd>
+        <MudTd DataLabel="">
+            <MudFab @onclick="@(()=>Edit(@data.Id))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+            <MudFab @onclick="@(()=>Delete(@data.Id))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private CategoryService ServiceModel = new();
+    private List<CategoryService> ServiceList = new();
+    private List<EventCategory> EventCategoryList = new();
+    private List<NotificationMessages> allNotificationMgs = new List<NotificationMessages>();
+    private List<NotificationMessages> currentUserMsgList = new List<NotificationMessages>();
+    private NotificationMessages notificationMessage = new NotificationMessages();
+    private MudTable<CategoryService> tableRef;
+    private IEnumerable<CategoryService> pagedData;
+    private int totalItems;
+    private int totalItemsOperator;
+    private HubConnection hubConnection;
+    private NotificationMessages NotificationModel = new();
+    private string BoxCss = "none";
+    private string searchString = "";
+    private string userid;
+    private string username;
+    private string error { get; set; }
+    private bool showLeaveAlert = false;
+    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider
+          .GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            claims = user.Claims;
+            userid = user.FindFirst(c => c.Type == ClaimTypes.Sid)?.Value;
+            username = user.FindFirst(c => c.Type == ClaimTypes.Sid)?.Value;
+        }
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(_NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<CategoryService>("ServiceAddUpdate", (categoryService) =>
+        {
+            GetAll();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAll();
+        }
+        return base.OnAfterRenderAsync(firstRender);
+    }
+    private List<CategoryService> GetAll()
+    {
+        tableRef.ReloadServerData();
+        ServiceList = _CategoryServiceRepository.GetList();
+        return ServiceList;
+    }
+    private async Task<TableData<CategoryService>> ServerReload(TableState state)
+    {
+        IEnumerable<CategoryService> data;
+        data = _CategoryServiceRepository.GetList();
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        
+        totalItemsOperator = data.Count();
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<CategoryService>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+    private async Task Save()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(ServiceModel.ServiceName))
+            {
+                error = "please enter a Service name";
+                showLeaveAlert = true;
+            }
+            else
+            {
+                _CategoryServiceRepository.InsertOrUpdate(ServiceModel);
+                Snackbar.Add(" record saved", Severity.Success);
+                showLeaveAlert = false;
+                await hubConnection.SendAsync("ServiceAddUpdate", ServiceModel);
+                ServiceModel = new CategoryService();
+            }
+            await tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+
+    }
+    private async Task Edit(long id)
+    {
+        try
+        {
+            ServiceModel = _CategoryServiceRepository.GetList().FirstOrDefault(c => c.Id == id);
+            await hubConnection.SendAsync("ServiceAddUpdate", ServiceModel);
+            await tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private async Task Delete(long id)
+    {
+        try
+        {
+            _CategoryServiceRepository.Delete(id);
+            Snackbar.Add("Category Data Deleted.", Severity.Success);
+            await tableRef.ReloadServerData();
+            await hubConnection.SendAsync("ServiceAddUpdate", ServiceModel);
+            await tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private bool Search(CategoryService services)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(services.ServiceName)
+            && services.ServiceName.Contains(searchString.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return false;
+    }
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+        return false;
+    }
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+}

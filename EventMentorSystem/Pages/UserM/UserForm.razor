@@ -1,0 +1,55 @@
+﻿@page "/AddUser"
+@attribute [Authorize(Roles = "Admin")]
+@using  EMS.DB.Repository.Interface
+@using EMS.DB.Constant
+@inject IUserRepository _UserRepository;
+@inject IStaffRepository _StaffRepository;
+@inject IOperatorRepository _OperatorRepository;
+@inject IAdminRepository _AdminRepository;
+@inject ISnackbar Snackbar;
+@inject NavigationManager NavigationManager;
+
+@if (_parameters.IsUserLoggedIn())
+{
+    <EditForm Model="@UserModel">
+        <DataAnnotationsValidator />
+        <MudCard Elevation="25" Class="my-2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Add User</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="Cancel"></MudIconButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudItem>
+                    <MudTextField @bind-Value="UserModel.FullName" For="@(() => UserModel.FullName)" Label="Full Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="UserModel.ContactNo" For="@(() => UserModel.ContactNo)" Label="contactno" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="UserModel.Useraddress" For="@(() => UserModel.Useraddress)" Label="Address" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    <MudTextField @bind-Value="UserModel.Email" Validation="@(new Func<string, IEnumerable<string>>(Emailaddress))" Label="email" Variant="Variant.Outlined" Margin="Margin.Normal"  Required="true" RequiredError="Email is required!"></MudTextField>
+                    <MudSelect @bind-Value="UserModel.Userrole" For="@(() => UserModel.Userrole)" Label="role" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem Value="@(Userrole.Admin.ToString())">@Userrole.Admin.ToString()</MudSelectItem>
+                        <MudSelectItem Value="@(Userrole.Operator.ToString())">@Userrole.Operator.ToString()</MudSelectItem>
+                        <MudSelectItem Value="@(Userrole.Staff.ToString())">@Userrole.Staff.ToString()</MudSelectItem>
+                    </MudSelect>
+                    <MudTextField @bind-Value="UserModel.Password" For="@(() => UserModel.Password)" InputType="InputType.Password" Label="password" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                </MudItem>
+                <MudItem Class="d-flex justify-end my-2">
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="Cancel">
+                        <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                    </MudButton>
+                    <MudButton Class="mx-1" ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">
+                        <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                    </MudButton>
+                </MudItem>
+            </MudCardContent>
+        </MudCard>
+    </EditForm>
+}
+else
+{
+    <UnauthorizedAccessExceptionView />
+}
+
+

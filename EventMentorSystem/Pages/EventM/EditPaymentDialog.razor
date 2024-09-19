@@ -1,0 +1,153 @@
+﻿@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@inject IPaymentRepository _PaymentRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject ISnackbar Snackbar;
+@inject NavigationManager NavigationManager; 
+@inject IEventRepository _EventRepository;
+@inject IUserRepository _UserRepository; 
+<EditForm Model="@PaymentModel" OnValidSubmit="Edit">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
+            <MudContainer Style="max-height: 500px; overflow-y: scroll">
+                <MudGrid>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.PaymentMode)" Class="m-1" @bind-Value="PaymentModel.PaymentMode" Label="Payment Mode" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.TotalAmount)" Class="m-1"  @bind-Value="PaymentModel.TotalAmount" Label="Total Amount" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.ReceivedAmount)" Class="m-0"  @bind-Value="PaymentModel.ReceivedAmount" Label="Received Amount" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.RemainingAmount)" Class="m-0" @bind-Value="PaymentModel.RemainingAmount" Label="Remaining Amount " Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.Transactionid)" Class="m-0" @bind-Value="PaymentModel.Transactionid" Label="Transaction Id" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudTextField For="@(() => PaymentModel.Description)" Class="m-0" @bind-Value="PaymentModel.Description" Label="Description" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudSelect @bind-Value="PaymentModel.EventId" For="@(() => PaymentModel.EventId)"  T="long" Class="m-0" Label="select Event" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" ReadOnly="true">
+                            @foreach (var events in GetAllEvent())
+                            {
+                                <MudSelectItem Value="@events.Id">@events.EventName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem lg="6" md="6" xs="12">
+                        <MudSelect @bind-Value="PaymentModel.UserId" For="@(() => PaymentModel.UserId)" Class="m-0" Label="User name" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var events in GetAllUser())
+                            {
+                                <MudSelectItem Value="@events.Id">@events.UserName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+            </MudContainer>
+</DialogContent>
+        <DialogActions>
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary">
+                <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public Payment PaymentModel { get; set; } = new Payment();
+    private Payment paymentModel = new();
+
+    [Parameter]
+    public GlobalParameter _parameters { get; set; }
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+    private bool isReadOnly = false;
+    private HubConnection hubConnection;
+    private List<Payment> PaymentList = new();
+    private List<Event> EventList = new();
+    private List<User> userList = new();
+    public Event eventname = new();
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Payment>("PaymentAddUpdate", (Payments) =>
+        {
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAllEvent();
+            GetAllUser();
+            StateHasChanged();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+    private List<User> GetAllUser()
+    {
+        userList = _UserRepository.GetAllUser();
+        return userList;
+    }
+    protected override void OnInitialized()
+    {
+        if (PaymentModel is not null && PaymentModel.Id > 0)
+        {
+            isReadOnly = true;
+        }
+        paymentModel = PaymentModel;
+        base.OnInitialized();
+    }
+    private List<Payment> GetAllPayment()
+    {
+        PaymentList = _PaymentRepository.GetPaymentList();
+        return PaymentList;
+    }
+    private List<Event> GetAllEvent()
+    {
+        EventList = _EventRepository.GetList();
+        return EventList;
+    }
+    public void GetEvent(long id)
+    {
+        eventname = _EventRepository.GetById(id);
+    }
+    private async Task Edit()
+    {
+        try
+        {
+            _PaymentRepository.Update(paymentModel);
+            await hubConnection.SendAsync("PaymentAddUpdate", paymentModel);
+            GetEvent(paymentModel.EventId);
+            NotificationMessagesModel.Message = $"Event {eventname.EventName} payment updeted by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole})";
+            NotificationMessagesModel.Title = "add payment";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = paymentModel.EventId;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            paymentModel = new Payment();
+            MudDialog.Close(DialogResult.Ok(true));
+            Snackbar.Add("PayMent detail Update successfully.", Severity.Success);
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    void Cancel() => MudDialog.Cancel();
+
+}

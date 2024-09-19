@@ -1,0 +1,234 @@
+﻿@using Microsoft.AspNetCore.Authentication;
+@using Microsoft.AspNetCore.Components;
+@using Microsoft.AspNetCore.Identity;
+@using EMS.DB.Constant;
+@inherits LayoutComponentBase
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject NavigationManager _NavigationManager
+@inject IDialogService DialogService
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudLayout>
+    <CascadingValue Value="_parameters" Name="cascadeParameters">
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+            <MudText Typo="Typo.h5" Class="ml-3 text">Event Mentor</MudText>
+            <MudSpacer />
+            <MudBadge Content="@allNotificationMgs.Count()" Color="Color.Dark" Overlap="true" Class="mx-6 my-4 cursor-pointer">
+                <MudIconButton @onclick="NotificationHideShow" Icon="@Icons.Material.Filled.Notifications" Color="Color.Secondary" />
+            </MudBadge>
+            <div class='ikrNotifications' style="display:@BoxCss !important">
+                <h3>Notifications (<span class='notiCounterOnHead'>@allNotificationMgs.Count()</span>)</h3>
+                <div class='ikrNotificationItems' style="color:black">
+                    @foreach (var nmobj in allNotificationMgs)
+                    {
+
+                        @*<div class='ikrsingleNotiDiv' onclick="location.href='https://localhost:44304/EditEvent/@nmobj.EventId';">
+                                <h5 style="font-size: 20px; margin-top: 10px;">@nmobj.Title</h5>
+                                <div class='ikrNotificationBody'>@nmobj.Message</div>
+                                <div class='ikrNotiCreatedDate'>updated by: at @nmobj.CreatedOn.ToLongDateString()</div>
+                                <hr style="margin:5px;width:100%" />
+                            </div>*@
+                        <div class="cursor-pointer" style="border-bottom: 1px solid #030202;width:100%;padding:4px;" onclick="location.href='https://localhost:44304/EditEvent/@nmobj.EventId';">
+                            <div class="ikrNotificationBody"><strong>@(nmobj.Message)</strong></div>
+                            <div class='ikrNotiCreatedDate'>@nmobj.CreatedOn.ToLongDateString()</div>
+                        </div>
+
+                    }
+                </div>
+                <div class="ikrSeeAll"><a @onclick="NotificationHideShow">see all</a></div>
+            </div>
+
+            @*<MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" Edge="Edge.End" @onclick="Logout" />*@
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopCenter">
+                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout">Logout</MudMenuItem>
+            </MudMenu>
+        </MudAppBar>
+        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+            <NavMenu />
+        </MudDrawer>
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    </CascadingValue>
+</MudLayout>
+
+
+
+
+@code {
+    [Inject] ISnackbar Snackbar { get; set; }
+    [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+    [Inject] UserManager<User> UserManager { get; set; }
+    [Inject] SignInManager<User> signInManager { get; set; }
+    private GlobalParameter _parameters = new();
+    private bool isUserLoggedIn = false;
+    private List<NotificationMessages> allNotificationMgs = new List<NotificationMessages>();
+    private NotificationMessages notificationMessage = new NotificationMessages();
+    //private HubConnection hubConnection;
+    private string BoxCss = "none";
+    public bool IsConnected => _parameters.hubConnection?.State == HubConnectionState.Connected;
+    private string authMessage;
+    private int count;
+    private string surname;
+    private string Userid;
+    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+    bool _drawerOpen = true;
+    public bool Isshow { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _parameters.hubConnection = new HubConnectionBuilder()
+.WithUrl(_NavigationManager.ToAbsoluteUri("/chathub"))
+.Build();
+        await _parameters.hubConnection.StartAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        AuthenticationState authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (authState.User.Identity is { IsAuthenticated: false })
+        {
+            isUserLoggedIn = false;
+            RedirectToLogin();
+        }
+        else
+        {
+            Isshow = true;
+            string nameIdentifier = authState.User.Identity.Name;
+            if (!string.IsNullOrEmpty(nameIdentifier))
+            {
+                isUserLoggedIn = true;
+                string userId = string.Empty;
+                var userIdClaim = authState.User.Claims.Where(c => c.Type == "UserId").FirstOrDefault();
+                var roleClaim = authState.User.Claims.Where(c => c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role").FirstOrDefault();
+                if (userIdClaim != null)
+                {
+                    userId = userIdClaim.Value;
+                }
+                else
+                {
+                    var claim = authState.User.Claims.Where(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").FirstOrDefault();
+                    if (claim != null)
+                    {
+                        userId = claim.Value;
+
+                    }
+                }
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    RedirectToLogin();
+                }
+
+                if (string.IsNullOrEmpty(_parameters.UserId))
+                {
+                    await FetchUserData(userId);
+                }
+
+                await RefreshNotification();
+                StateHasChanged();
+
+            }
+            else
+            {
+                RedirectToLogin();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _parameters.hubConnection.On<NotificationMessages>("SendMessage", async (notificationMessages) =>
+            {
+                await RefreshNotification();
+                InvokeAsync(StateHasChanged);
+            });
+
+            _parameters.ErrorTriggerEvent += ErrorTriggerMessage;
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task FetchUserData(string userId)
+    {
+        try
+        {
+            _parameters.UserId = userId;
+            _parameters.LoggedInUser = await UserManager.FindByIdAsync(userId);
+            if (Isshow)
+            {
+                if (_parameters.LoggedInUser.Userrole == Userrole.Admin.ToString())
+                {
+                    Snackbar.Add($"Hello {_parameters.LoggedInUser.FullName}! Welcome To The EventMentor Admin Panel.", Severity.Success);
+                }
+                else if (_parameters.LoggedInUser.Userrole == Userrole.Operator.ToString())
+                {
+                    Snackbar.Add($"Hello {_parameters.LoggedInUser.FullName}! Welcome To The EventMentor Operator Panel.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add($"Hello {_parameters.LoggedInUser.FullName}! Welcome To The EventMentor Staff Panel.", Severity.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            throw;
+        }
+    }
+
+
+
+    private void RedirectToLogin()
+    {
+
+        _NavigationManager.NavigateTo($"/identity/account/login");
+    }
+
+
+    private void NotificationHideShow()
+    {
+        if (BoxCss == "none") BoxCss = "block";
+        else BoxCss = "none";
+    }
+
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private async Task Logout()
+    {
+        //
+        _NavigationManager.NavigateTo($"/identity/account/logout", true);
+    }
+
+
+    private async Task RefreshNotification()
+    {
+        allNotificationMgs = new List<NotificationMessages>();
+
+        if (_parameters is not null && !string.IsNullOrEmpty(_parameters.UserId))
+            allNotificationMgs = await _NotificationMessagesRepository.GetMessages(_parameters.UserId);
+
+
+    }
+
+    private async Task ErrorTriggerMessage(Exception exception)
+    {
+        if (exception is not null)
+        {
+            Snackbar.Add(string.Concat(exception.Message, Environment.NewLine, exception.StackTrace), Severity.Error);
+        }
+    }
+
+
+}

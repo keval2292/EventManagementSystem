@@ -1,0 +1,261 @@
+﻿@using EMS.DB.Models
+@using EMS.DB.Constant
+@using  EMS.DB.Repository.Interface
+@using System.Net
+@using System.Net.Mail
+@using  EMS.DB.Repository.Interface
+@using System.IO;
+@using EventMentorSystem.Shared
+@inject IEventRepository _EventRepository;
+@inject ISnackbar Snackbar;
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject IOperatorRepository _OperatorRepository;
+@inject IInquiryRepository _InquiryRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject IDialogService DialogService
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager _NavigationManager;
+<EditForm Model="@eventModel" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
+            <MudGrid>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudTextField Class="m-0" @bind-Value="eventModel.EventName" For="@(() => eventModel.EventName)" Label="Event Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudSelect Class="m-0" @bind-Value="eventModel.OperatorId" For="@(() => eventModel.OperatorId)" Label="Operator Name" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var data in OperatorList)
+                        {
+                            <MudSelectItem Value="@data.Id">@data.User.FullName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudTextField Class="m-0" @bind-Value="eventModel.EventVenue" For="@(() => eventModel.EventVenue)" Label="Event Venue" Variant="Variant.Outlined" Margin="Margin.Normal" ReadOnly="isReadOnly"></MudTextField>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudTextField Class="m-0" @bind-Value="eventModel.OrganizerName" For="@(() => eventModel.OrganizerName)" Label="Organizer Name" Variant="Variant.Outlined" Margin="Margin.Normal" ReadOnly="isReadOnly"></MudTextField>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudTextField Class="mt-0" @bind-Value="eventModel.OrganizerContact" For="@(() => eventModel.OrganizerContact)" Label="Organizer Contact" Variant="Variant.Outlined" Margin="Margin.Normal" ReadOnly="isReadOnly"></MudTextField>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudTextField Class="mt-0" @bind-Value="eventModel.Email" For="@(() => eventModel.Email)" Label="Organizer Contact" Variant="Variant.Outlined" Margin="Margin.Normal" ReadOnly="isReadOnly"></MudTextField>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudSelect @bind-Value="@eventModel.SlotType" For="@(() => eventModel.SlotType)" Class="m-0" T="string" Label="slot" Variant="Variant.Outlined" ReadOnly="isReadOnly">
+                        <MudSelectItem Value="@(EventSlotType.Morning.ToString())" />
+                        <MudSelectItem Value="@(EventSlotType.Evening.ToString())" />
+                        <MudSelectItem Value="@(EventSlotType.FullDay.ToString())" />
+                        <MudSelectItem Value="@(EventSlotType.MultipleDay.ToString())" />
+                    </MudSelect>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudDatePicker Class="m-0" Label="From Date" @bind-Date="eventModel.FromDate" For="@(() => eventModel.FromDate)" DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" ReadOnly="isReadOnly" />
+                </MudItem>
+                @if (eventModel.SlotType == EventSlotType.MultipleDay.ToString())
+                {
+                    <MudItem lg="4" md="4" xs="12">
+                        <MudDatePicker Class="m-0" Label="To Date" @bind-Date="eventModel.Todate" For="@(() => eventModel.Todate)" DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" ReadOnly="isReadOnly" />
+                    </MudItem>
+                }
+                <MudItem lg="4" md="4" xs="12">
+                    <MudSelect Class="m-0" @bind-Value="eventModel.CategoryId" For="@(() => eventModel.CategoryId)" T="long" SelectedValuesChanged="@(e => OnEventCategoryChange(e.FirstOrDefault()))" Label="select categorys" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var eventCategory in EventCategoryList)
+                        {
+                            <MudSelectItem Value="@eventCategory.Id">@eventCategory.CategoryName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12" Class="m-0">
+
+                </MudItem>
+                <MudItem lg="4" md="4" xs="12">
+                    <MudSwitch Class="m-0" @bind-Checked="eventModel.IsApproved" For="@(() => eventModel.IsApproved)" Label="Approved?" Color="Color.Primary" />
+                    <MudSwitch Class="m-0" @bind-Checked="eventModel.Ispaymentdone" For="@(()=>eventModel.Ispaymentdone)" Label="Payment done?" Color="Color.Primary" />
+                </MudItem>
+                <MudItem lg="12" md="12" xs="12">
+                    <MudTextField T="string" Label="Description" Variant="Variant.Outlined" Required="true" RequiredError="this fill is required." @bind-Text="eventModel.Description" Lines="5" />
+                </MudItem>
+            </MudGrid>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="CancelForm" Variant="Variant.Filled" Color="Color.Error">Cancel</MudButton>
+            <MudButton Color="Color.Primary" ButtonType="ButtonType.Submit" Variant="Variant.Filled">Add</MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public Inquiry InquiryModel { get; set; } = new Inquiry();
+    [Parameter] public Event EventModel { get; set; } = new Event();
+    [Parameter]
+    public GlobalParameter _parameters { get; set; }
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+    private List<EventCategory> EventCategoryList = new();
+    private List<Event> eventList = new();
+    private bool isReadOnly = false;
+    private Inquiry inquiryModel = new();
+    private Event eventModel = new();
+    private List<Operator> OperatorList = new();
+    private NotificationMessages NotificationMessageModel = new();
+    private List<CategoryService> ServiceList = new();
+    private List<Inquiry> inquiryList = new();
+    string EventDetailsEmailTemplate = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "MailTemplate", "EventDetails.html");
+    void Submit() => MudDialog.Close(DialogResult.Ok(true));
+    void Cancel() => MudDialog.Cancel();
+
+    private HubConnection hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(_NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Event>("EventAddUpdate", (events) =>
+        {
+
+            GetAllevents();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+    private List<Inquiry> GetLists()
+    {
+        inquiryList = _InquiryRepository.GetLists();
+        return inquiryList;
+    }
+    private void GetEventCategoryList()
+    {
+        EventCategoryList = _EventCategoryRepository.GetList();
+    }
+
+    public void OnEventCategoryChange(long selectedEventCategoryId)
+    {
+    }
+    private List<Operator> GetOperatorlist()
+    {
+        OperatorList = _OperatorRepository.GetLists();
+        return OperatorList;
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            eventModel.OrganizerName = inquiryModel.Fullname;
+            eventModel.SlotType = inquiryModel.SlotType;
+            eventModel.Email = inquiryModel.Email;
+            eventModel.OrganizerContact = inquiryModel.MobileNo;
+            eventModel.CategoryId = inquiryModel.EventCategoryId;
+            eventModel.FromDate = inquiryModel.FromDate;
+            eventModel.Todate = inquiryModel.ToDate;
+            eventModel.Description = inquiryModel.Additionalnotes;
+            eventModel.EventVenue = string.Concat(inquiryModel.AddressLine1 + "," + inquiryModel.AddressLine2 + "," + inquiryModel.Landmark + "," + inquiryModel.City + "," + inquiryModel.State + ".");
+            eventModel.InquiryId = inquiryModel.Id;
+            GetEventCategoryList();
+            GetOperatorlist();
+            StateHasChanged();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    protected override void OnInitialized()
+    {
+        if (InquiryModel is not null && InquiryModel.Id > 0)
+        {
+            isReadOnly = true;
+        }
+
+        inquiryModel = InquiryModel;
+        eventModel = EventModel;
+        base.OnInitialized();
+    }
+
+
+    #region Private Methods
+
+    private List<Event> GetAllevents()
+    {
+        eventList = _EventRepository.GetList();
+        return eventList;
+    }
+
+    public List<Operator> operatorlist = new();
+    public string name { get; set; }
+    private void Operatorname()
+    {
+        operatorlist = _OperatorRepository.GetById(eventModel.OperatorId);
+        foreach (var data in operatorlist)
+        {
+            name = data.User.FullName;
+        }
+    }
+    private async Task Save()
+    {
+        try
+        {
+
+            _EventRepository.Insert(eventModel);
+            Snackbar.Add(" record saved", Severity.Success);
+            Sendmail(eventModel.Email,eventModel.Id);
+            await hubConnection.SendAsync("EventAddUpdate", eventModel);
+            NotificationMessagesModel.Message = $"Event {eventModel.EventName} Added by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole})";
+            NotificationMessagesModel.Title = "add Event";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = eventModel.Id;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            GetAllevents();
+            eventModel = new Event();
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+
+    }
+
+    private void CancelForm()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+        inquiryModel = new Inquiry();
+    }
+    private void Sendmail(string email,long id)
+    {
+        try
+        {
+            using (MailMessage mail = new MailMessage())
+            {
+                mail.From = new MailAddress("eventmentor3@gmail.com");
+                mail.To.Add(@email);
+                mail.Subject = "Event Details.";
+                var str = File.ReadAllText(EventDetailsEmailTemplate);
+                string eventlink = "https://localhost:44304/eventdetail/" + StringCipher.Encode(Convert.ToString(id));
+                mail.Body = str.Replace("{{EVENTDETAILSLINK}}", eventlink);
+                mail.IsBodyHtml = true;
+
+
+                using (SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587))
+                {
+                    smtp.Credentials = new NetworkCredential("eventmentor3@gmail.com", "ifjwikzwvsguvksb");
+                    smtp.EnableSsl = true;
+                    smtp.Send(mail);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+        //nyjagskbmgrqvkkb
+    }
+    #endregion
+
+
+}

@@ -1,0 +1,324 @@
+﻿@page "/viewpaymentlist"
+@attribute [Authorize(Roles = "Admin")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface;
+@inject IEventRepository _EventRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject IUserRepository _UserRepository;
+@inject IPaymentRepository _PaymentRepository;
+@inject ISnackbar Snackbar;
+@inject IDialogService DialogService;
+@inject NavigationManager NavigationManager;
+
+<AuthorizeView Roles="Admin" Context="data">
+    <Authorized>
+        @if (IsEdit || IsAdd)
+        {
+            <EditForm Model="@PaymentModel" OnValidSubmit="Addpayment">
+                <DataAnnotationsValidator />
+                <MudCard Elevation="25" Class="my-2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Add / Edit Events</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="CancelForm"></MudIconButton>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudItem>
+                            <MudTextField @bind-Value="PaymentModel.PaymentMode" For="@(() => PaymentModel.PaymentMode)" Label="Payment Mode" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                            <MudTextField @bind-Value="PaymentModel.TotalAmount" For="@(() => PaymentModel.TotalAmount)" Label="Total Amount" Variant="Variant.Outlined" Margin="Margin.Normal" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.CurrencyRupee" AdornmentColor="Color.Warning"></MudTextField>
+                            <MudTextField @bind-Value="PaymentModel.ReceivedAmount" For="@(() => PaymentModel.ReceivedAmount)" Label="Received Amount" Variant="Variant.Outlined" Margin="Margin.Normal" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.CurrencyRupee" AdornmentColor="Color.Warning"></MudTextField>
+                            @if (!string.IsNullOrEmpty(PaymentModel.TotalAmount) && !string.IsNullOrEmpty(PaymentModel.ReceivedAmount))
+                            {
+                                long demo = Convert.ToInt64(PaymentModel.TotalAmount) - Convert.ToInt64(PaymentModel.ReceivedAmount);
+                                PaymentModel.RemainingAmount = Convert.ToString(demo);
+                            }
+                            <MudTextField ReadOnly="true"  @bind-Value="PaymentModel.RemainingAmount" For="@(() => PaymentModel.RemainingAmount)" Label="Remaining Amount " Variant="Variant.Outlined" Margin="Margin.Normal" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.CurrencyRupee" AdornmentColor="Color.Warning"></MudTextField>
+                            <MudTextField @bind-Value="PaymentModel.Transactionid" For="@(() => PaymentModel.Transactionid)" Label="Transaction Id" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                            <MudTextField @bind-Value="PaymentModel.Description" For="@(() => PaymentModel.Description)" Label="Description" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                            <MudSelect @bind-Value="PaymentModel.EventId" For="@(() => PaymentModel.EventId)" Label="select Event" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var events in GetAllEvent())
+                                    {
+                                    <MudSelectItem Value="@events.Id">@events.EventName</MudSelectItem>
+                                    }
+                            </MudSelect>
+                            <MudSelect @bind-Value="PaymentModel.UserId" For="@(() => PaymentModel.UserId)" Label="User name" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var events in GetAllUser())
+                                    {
+                                    <MudSelectItem Value="@events.Id">@events.UserName</MudSelectItem>
+                                    }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem Class="d-flex justify-end my-2">
+                            <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelForm">
+                                <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                            </MudButton>
+                            <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">
+                                <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                            </MudButton>
+                        </MudItem>
+                    </MudCardContent>
+                </MudCard>
+            </EditForm>
+        }
+        else
+        {
+
+            <MudItem Class="d-flex justify-end my-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary " OnClick="ShowAddForm" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+                    <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                </MudButton>
+            </MudItem>
+        }
+        <MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<Payment>>>(ServerReload))" T="Payment" Filter="new Func<Payment, bool>(Search)" Class="w-100" @bind-customer="PaymentList">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6"><b>Payment </b></MudText>
+                <MudSpacer />
+                <MudTextField Value="searchString" T=" string" ValueChanged="@(s => OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Action</MudTh>
+                <MudTh>Id</MudTh>
+                <MudTh>Event</MudTh>
+                <MudTh>Organizer Name(#Contact)</MudTh>
+                @*<MudTh>Organizer No</MudTh>*@
+                <MudTh>From Date</MudTh>
+                <MudTh>Payment Mode</MudTh>
+                <MudTh>Total Amount</MudTh>
+                <MudTh>Received Amount</MudTh>
+                <MudTh>Remaining Amount</MudTh>
+                <MudTh>Transaction Id</MudTh>
+                <MudTh>Description</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="">
+                    <MudFab @onclick="@(() => OpenDialog(@context))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+                    <MudFab @onclick="@(() => Delete(@context.Id))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+                </MudTd>
+                <MudTd DataLabel="Id">@context.Id</MudTd>
+                <MudTd DataLabel="Id">@context.Event.EventName</MudTd>
+                <MudTd DataLabel="Id">@context.Event.OrganizerName@(string.Concat("(#", @context.Event.OrganizerContact, ") "))</MudTd>
+                @*<MudTd DataLabel="Id">@context.Event.OrganizerContact</MudTd>*@
+                <MudTd DataLabel="Id">@context.Event.FromDate?.ToLongDateString()</MudTd>
+                <MudTd DataLabel="Id">@context.PaymentMode</MudTd>
+                <MudTd DataLabel="Id">@ValidCurrency(context.TotalAmount)</MudTd>
+                <MudTd DataLabel="Id">@ValidCurrency(context.ReceivedAmount)</MudTd>
+                <MudTd DataLabel="Id">@ValidCurrency(context.RemainingAmount)</MudTd>
+                <MudTd DataLabel="Id">@context.Transactionid</MudTd>
+                <MudTd DataLabel="Id">@context.Description</MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+            </PagerContent>
+        </MudTable>
+    </Authorized>
+    <NotAuthorized>
+        <MudAlert Severity="Severity.Error">please <MudLink Href="/login">login</MudLink></MudAlert>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code{
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private List<Payment> PaymentList = new();
+    private List<Event> EventList = new();
+    public Event eventname = new();
+    private List<User> UserList = new();
+    private Payment PaymentModel = new();
+    private long difference;
+    private NotificationMessages NotificationMessagesModel = new();
+    private string searchString = "";
+    private MudTable<Payment> tableRef;
+    private IEnumerable<Payment> pagedData;
+    private DateTime? startDate;
+    //private HubConnection HubConnection;
+    private DateTime? endDate;
+    private bool IsEdit;
+    private bool IsAdd;
+    private int totalItems;
+    private int totalItemsOperator;
+    private HubConnection hubConnection;
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Payment>("PaymentAddUpdate", (Payments) =>
+        {
+            GetAllPayment();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAllPayment();
+            GetAllEvent();
+            GetAllUser();
+            StateHasChanged();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+
+    private void CancelForm()
+    {
+        try
+        {
+            IsEdit = false;
+            IsAdd = false;
+            PaymentModel = new Payment();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private List<Payment> GetAllPayment()
+    {
+        tableRef.ReloadServerData();
+        PaymentList = _PaymentRepository.GetPaymentList();
+        return PaymentList;
+    }
+    private List<Event> GetAllEvent()
+    {
+        EventList = _EventRepository.GetList();
+        return EventList;
+    }
+    public void GetEvent(long id)
+    {
+        eventname = _EventRepository.GetById(id);
+    }
+    private List<User> GetAllUser()
+    {
+        UserList = _UserRepository.GetAllUser();
+        return UserList;
+    }
+
+    private bool Search(Payment payments)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(payments.PaymentMode)
+            && StringValid(payments.TotalAmount)
+            && StringValid(payments.ReceivedAmount)
+            && StringValid(payments.RemainingAmount)
+            && StringValid(payments.Transactionid)
+            && StringValid(payments.Description)
+            &&
+            payments.PaymentMode.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || payments.TotalAmount.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || payments.ReceivedAmount.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || payments.RemainingAmount.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || payments.Description.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || payments.Transactionid.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TableData<Payment>> ServerReload(TableState state)
+    {
+        IEnumerable<Payment> data;
+
+        //get all data of current month
+        data = _PaymentRepository.GetPaymentList(); ;
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItemsOperator = data.Count();
+
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<Payment>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+
+
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+    private async Task Addpayment()
+    {
+        try
+        {
+            _PaymentRepository.Insert(PaymentModel);
+            tableRef.ReloadServerData();
+            GetEvent(PaymentModel.EventId);
+            Snackbar.Add(" record saved", Severity.Success);
+            NotificationMessagesModel.Message = $"Event {eventname.EventName} payment updated by {_parameters.LoggedInUser.FullName}({_parameters.LoggedInUser.Userrole})";
+            NotificationMessagesModel.Title = "payment";
+            NotificationMessagesModel.UserId = PaymentModel.UserId;
+            NotificationMessagesModel.EventId = PaymentModel.EventId;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            await hubConnection.SendAsync("PaymentAddUpdate", PaymentModel);
+            PaymentModel = new Payment();
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void ShowAddForm()
+    {
+        PaymentModel = new Payment();
+        IsAdd = true;
+    }
+
+    private async Task Delete(long id)
+    {
+        try
+        {
+            _PaymentRepository.Delete(id);
+            Snackbar.Add("payment Detial Data Deleted.", Severity.Success);
+            await hubConnection.SendAsync("PaymentAddUpdate", PaymentModel);
+            tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void OpenDialog(Payment payments)
+    {
+
+        var parameters = new DialogParameters();
+        parameters.Add("paymentsModel", payments);
+        parameters.Add("_parameters", _parameters);
+        var options = new DialogOptions()
+        {
+            CloseOnEscapeKey = false,
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            Position = DialogPosition.TopCenter,
+            DisableBackdropClick = true
+
+        };
+
+        DialogService.Show<EditPaymentDialog>("Edit Payment", parameters, options);
+
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+    string ValidCurrency(string value) => string.Format("₹ {0:#.00}", Convert.ToDecimal(value));
+
+}

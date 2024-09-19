@@ -1,0 +1,437 @@
+﻿@page "/staffworkgivenlist"
+@attribute [Authorize(Roles = "Admin,Operator")]
+@using  EMS.DB.Repository.Interface
+@inject IEventStaffWorkRepository _EventStaffWorkRepository;
+@inject IEventRepository _EventRepository;
+@inject IStaffRepository _StaffRepository;
+@inject ICategoryServiceRepository _CategoryServiceRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject ISnackbar Snackbar;
+@inject IDialogService DialogService;
+@inject NavigationManager NavigationManager;
+@if (IsAdd)
+{
+    <EditForm Model="@EventStaffWorkModel" OnValidSubmit="Save">
+        <DataAnnotationsValidator />
+        <MudCard Elevation="25" Class="my-2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Event Work</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="CancelForm"></MudIconButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudItem>
+                    @*@bind-Value="EventStaffWorkModel.EventId"*@
+                    <MudSelect T="long" Value="EventStaffWorkModel.EventId" ValueChanged="@(e => EventSelectionChange(e))" For="@(() => EventStaffWorkModel.EventId)" Label="Event" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var data in EventList)
+                        {
+                            <MudSelectItem T="long" Value="data.Id">@data.EventName</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudSelect @bind-Value="EventStaffWorkModel.Service" For="@(() => EventStaffWorkModel.Service)" Label="Event Service" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @if (EventStaffWorkModel.EventId > 0)
+                            {
+                                foreach (var data in EventList)
+                                {
+                                    if (EventStaffWorkModel.EventId == data.Id && data.SelectedService is not null)
+                                    {
+                                        ServiceList = data.SelectedService.Split(",").ToList();
+
+                                        foreach (var service in ServiceList)
+                                        {
+                                        <MudSelectItem Value="service.Trim()">@service</MudSelectItem>
+                                        }
+                                    }
+                                }
+                            }
+                    </MudSelect>
+                    <MudSelect T="long" @bind-Value="EventStaffWorkModel.StaffId" For="@(() => EventStaffWorkModel.StaffId)" Label="Staff" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+
+                        @foreach (var data in GetAllservice())
+                        {
+
+                            foreach (var data1 in GetAlluser())
+                            {
+
+                                if (data.Id == data1.StaffService)
+                                {
+                                    <MudSelectItem T="long" Value="data1.Id">@data1.User.UserName</MudSelectItem>
+                                }
+
+                            }
+                        }
+
+                    </MudSelect>
+                    <MudTextField @bind-Value="EventStaffWorkModel.Description" For="@(() => EventStaffWorkModel.Description)" Label="Description" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                </MudItem>
+
+                <MudItem Class="d-flex justify-end">
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelForm">
+                        <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                    </MudButton>
+                    <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary" >
+                        <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                    </MudButton>
+                </MudItem>
+            </MudCardContent>
+        </MudCard>
+    </EditForm>
+}
+else if (IsEdit)
+{
+    <EditForm Model="@EventStaffWorkModel" OnValidSubmit="edit">
+        <DataAnnotationsValidator />
+        <MudCard Elevation="25" Class="my-2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Event Work</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.TwoTone.Close" Color="Color.Error" Edge="Edge.End" OnClick="CancelForm"></MudIconButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudItem>
+                    <MudSelect T="long" @bind-Value="EventStaffWorkModel.EventId" For="@(() => EventStaffWorkModel.EventId)" Label="Event" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var data in GetAllevents())
+                        {
+                            <MudSelectItem T="long" Value="data.Id">@data.EventName</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudSelect @bind-Value="EventStaffWorkModel.Service" For="@(() => EventStaffWorkModel.Service)" Label="Event Service" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @if (EventStaffWorkModel.EventId > 0)
+                            {
+                                foreach (var data in GetAllevents())
+                                {
+                                    if (EventStaffWorkModel.EventId == data.Id)
+                                    {
+                                        ServiceList = data.SelectedService.Split(",").ToList();
+
+                                        foreach (var service in ServiceList)
+                                        {
+                                        <MudSelectItem Value="service.Trim()">@service</MudSelectItem>
+                                        }
+                                    }
+                                }
+                            }
+                    </MudSelect>
+                    <MudSelect T="long" @bind-Value="EventStaffWorkModel.StaffId" For="@(() => EventStaffWorkModel.StaffId)" Label="Staff" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+
+                        @foreach (var data in GetAllservice())
+                        {
+
+                            foreach (var data1 in GetAlluser())
+                            {
+
+                                if (data.Id == data1.StaffService)
+                                {
+                                    <MudSelectItem T="long" Value="data1.Id">@data1.User.UserName</MudSelectItem>
+                                }
+
+                            }
+                        }
+
+                    </MudSelect>
+                    <MudTextField @bind-Value="EventStaffWorkModel.Description" For="@(() => EventStaffWorkModel.Description)" Label="Description" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                </MudItem>
+                <MudItem Class="d-flex justify-end">
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelForm">
+                        <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                    </MudButton>
+                    <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" >
+                        <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                    </MudButton>
+                </MudItem>
+            </MudCardContent>
+        </MudCard>
+    </EditForm>
+}
+else
+{
+    <MudItem Class="d-flex justify-end my-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary " OnClick="ShowAddForm" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+            <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+        </MudButton>
+    </MudItem>
+}
+
+<MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<EventStaffWork>>>(ServerReload))" T="EventStaffWork" Filter="new Func<EventStaffWork, bool>(Search)" Class="w-100" @bind-customer="EventStaffWorkList">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6"><b>Event Work</b></MudText>
+        <MudSpacer />
+        <MudTextField Value="searchString" T=" string" ValueChanged="@(s => OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Action</MudTh>
+        <MudTh>Event</MudTh>
+        <MudTh>Venue</MudTh>
+        <MudTh>From Date</MudTh>
+        <MudTh>Slot</MudTh>
+        <MudTh>Service</MudTh>
+        <MudTh>Description</MudTh>
+        <MudTh>Status</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="">
+            <MudFab @onclick="@(() => Edit(@context.Id))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+        </MudTd>
+        <MudTd DataLabel="Id">@context.Event.EventName</MudTd>
+        <MudTd DataLabel="Id">@context.Event.EventVenue</MudTd>
+        <MudTd DataLabel="Id">@context.Event.FromDate?.ToLongDateString()</MudTd>
+        <MudTd DataLabel="Id">@context.Event.SlotType</MudTd>
+        <MudTd DataLabel="Id">@context.Service</MudTd>
+        <MudTd DataLabel="Id">@context.Description</MudTd>
+        <MudTd>
+            <MudButton @onclick="@(() => viewstatus(context))" Variant="Variant.Text">@context.Status </MudButton>
+        </MudTd>
+
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 5, 10, 20, 50 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private string searchString = "";
+    List<String> ServiceList = new List<String>();
+    private List<EventStaffWork> EventStaffWorkList = new();
+    private List<Event> EventList = new();
+    private List<CategoryService> CategoryServiceList = new();
+    private List<Staff> staffList = new();
+    private List<User> userList = new();
+    private EventStaffWork EventStaffWorkModel = new();
+    private MudTable<EventStaffWork> tableRef;
+    private IEnumerable<EventStaffWork> pagedData;
+    private bool IsEdit;
+    private bool IsAdd;
+    private bool IsStatus;
+    private int totalItems;
+    private int totalItemsOperator;
+    private long demo;
+    public Event eventname = new();
+    public Staff staff= new();
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+    private HubConnection hubConnection;
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<EventStaffWork>("WorkAddUpdate", (EventStaffWorks) =>
+        {
+            tableRef.ReloadServerData();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+
+
+    private List<Staff> GetAlluser()
+    {
+        staffList = _StaffRepository.GetList();
+        return staffList;
+    }
+    private List<CategoryService> GetAllservice()
+    {
+        CategoryServiceList = _CategoryServiceRepository.GetByservice(EventStaffWorkModel.Service);
+        return CategoryServiceList;
+    }
+    private List<Event> GetAllevents()
+    {
+        EventList = _EventRepository.GetList();
+        return EventList;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAllevents();
+            GetAllEventStaffWork();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+    private List<EventStaffWork> GetAllEventStaffWork()
+    {
+        EventStaffWorkList = _EventStaffWorkRepository.GetEventStaffWorkList();
+        return EventStaffWorkList;
+    }
+    public void GetEvent(long id)
+    {
+        eventname = _EventRepository.GetById(id);
+    }
+    public void GetStaff(long id)
+    {
+        staff = _StaffRepository.GetStaff(id);
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            EventStaffWorkModel.Status = "pending";
+            _EventStaffWorkRepository.Insert(EventStaffWorkModel);
+            GetEvent(EventStaffWorkModel.EventId);
+            GetStaff(EventStaffWorkModel.StaffId);
+            NotificationMessagesModel.Message = $"Event {eventname.EventName} work gave to {staff.User.FullName}.";
+            NotificationMessagesModel.Title = "Event work";
+            NotificationMessagesModel.UserId = _parameters.UserId;
+            NotificationMessagesModel.EventId = EventStaffWorkModel.EventId;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            Snackbar.Add(" record Given SucessFull", Severity.Success);
+            await hubConnection.SendAsync("WorkAddUpdate", EventStaffWorkModel);
+            tableRef.ReloadServerData();
+            EventStaffWorkModel = new EventStaffWork();
+            IsAdd = false;
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private async Task edit()
+    {
+        try
+        {
+            _EventStaffWorkRepository.Update(EventStaffWorkModel);
+            Snackbar.Add(" record Update sucessfull", Severity.Success);
+            tableRef.ReloadServerData();
+            await hubConnection.SendAsync("WorkAddUpdate", EventStaffWorkModel);
+            EventStaffWorkModel = new EventStaffWork();
+            IsEdit = false;
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private bool Search(EventStaffWork EventStaffWorks)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(EventStaffWorks.Service)
+            && StringValid(EventStaffWorks.Description)
+            && StringValid(EventStaffWorks.Status)
+            &&
+               EventStaffWorks.Service.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || EventStaffWorks.Description.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || EventStaffWorks.Status.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TableData<EventStaffWork>> ServerReload(TableState state)
+    {
+        IEnumerable<EventStaffWork> data;
+
+        //get all data of current month
+        data = _EventStaffWorkRepository.GetEventStaffWorkList();
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItemsOperator = data.Count();
+
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<EventStaffWork>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+
+    private void CancelForm()
+    {
+        try
+        {
+            IsEdit = false;
+            IsAdd = false;
+            EventStaffWorkModel = new EventStaffWork();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void ShowAddForm()
+    {
+        EventStaffWorkModel = new EventStaffWork();
+        IsAdd = true;
+    }
+    private void Edit(long id)
+    {
+
+        try
+        {
+            EventStaffWorkModel = EventStaffWorkList.FirstOrDefault(c => c.Id == id);
+            IsEdit = true;
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void viewstatus(EventStaffWork eventStaffWork)
+    {
+
+        var parameters = new DialogParameters();
+        parameters.Add("EventStaffWorkModel", eventStaffWork);
+        var options = new DialogOptions()
+        {
+            CloseOnEscapeKey = false,
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            Position = DialogPosition.TopCenter,
+            DisableBackdropClick = true
+
+        };
+
+        DialogService.Show<ViewWorkStatus>("view Status", parameters, options);
+
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+
+    private void EventSelectionChange(long eventId)
+    {
+        EventStaffWorkModel.EventId = eventId;
+        var selectedEventServices = EventList is not null && EventList.Any() ? EventList.FirstOrDefault(data => data.Id == EventStaffWorkModel.EventId).SelectedService : string.Empty;
+        if (string.IsNullOrEmpty(selectedEventServices))
+        {
+            Snackbar.Add("No selected services found for selected event", Severity.Error);
+        }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

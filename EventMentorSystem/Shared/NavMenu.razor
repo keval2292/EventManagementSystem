@@ -1,0 +1,46 @@
+﻿@inject IUserRepository _UserRepository;
+<MudPaper Width="250px" Class="d-inline-flex py-3" Elevation="0">
+    <MudNavMenu Class="mud-width-full">
+        @foreach (var data in Getuser())
+        {
+            <PersonCard  Style="background-color: var(--mud-palette-drawer-background);color: var(--mud-palette-drawer-text);" />
+        }
+        <MudDivider Class="my-2" />
+        <AuthorizeView Roles="Admin">
+            <MudNavLink Href="/"  Icon="@Icons.Material.Outlined.Dashboard" IconColor="Color.Primary">Dashboard</MudNavLink>
+            <MudNavLink Href="/inquirylist" Icon="@Icons.Material.TwoTone.AppRegistration" IconColor="Color.Primary">Inquiries</MudNavLink>
+            <MudNavLink Href="/eventlist" Icon="@Icons.Material.TwoTone.Event" IconColor="Color.Primary">Events</MudNavLink>
+            <MudNavLink Href="/staffworkgivenlist" Icon="@Icons.Material.TwoTone.Category" IconColor="Color.Primary">Event Work</MudNavLink>
+            <MudNavLink Href="/viewpaymentlist" Icon="@Icons.Material.TwoTone.Payment" IconColor="Color.Primary">Payments</MudNavLink>
+            <MudNavLink Href="/eventcategorylist" Icon="@Icons.Material.TwoTone.ViewList" IconColor="Color.Primary">Categories</MudNavLink>
+            <MudNavLink Href="/servicelist" Icon="@Icons.Material.TwoTone.MiscellaneousServices" IconColor="Color.Primary">Services</MudNavLink>
+            <MudNavLink Href="/userlist" Icon="@Icons.Material.TwoTone.AccountBox" IconColor="Color.Primary">Users</MudNavLink>
+            <MudNavLink Href="/staffupdatelist" Icon="@Icons.Material.Filled.Person" IconColor="Color.Primary">Staffs</MudNavLink>
+            <MudNavLink Href="/identity/account/logout" Icon="@Icons.Material.Filled.Logout" IconColor="Color.Primary">Logout</MudNavLink>
+
+        </AuthorizeView>
+        <AuthorizeView Roles="Operator">
+            <MudNavLink Href="/"  Icon="@Icons.Material.Outlined.Dashboard" IconColor="Color.Primary">Dashboard</MudNavLink>
+            <MudNavLink Href="/eventlist" Icon="@Icons.Material.TwoTone.Event" IconColor="Color.Primary">Events</MudNavLink>
+            <MudNavLink Href="/staffworkgivenlist" Icon="@Icons.Material.TwoTone.Category" IconColor="Color.Primary">Event Work</MudNavLink>
+            <MudNavLink Href="/eventcategorylist" Icon="@Icons.Material.TwoTone.ViewList" IconColor="Color.Primary">Categories</MudNavLink>
+            <MudNavLink Href="/servicelist" Icon="@Icons.Material.TwoTone.MiscellaneousServices" IconColor="Color.Primary">Services</MudNavLink>
+            <MudNavLink Href="/staffupdatelist" Icon="@Icons.Material.Filled.Person" IconColor="Color.Primary">Staffs</MudNavLink>
+            <MudNavLink Href="/identity/account/logout" Icon="@Icons.Material.Filled.Logout" IconColor="Color.Primary">Logout</MudNavLink>
+        </AuthorizeView>
+        <AuthorizeView Roles="Staff">
+            <MudNavLink Href="/"  Icon="@Icons.Material.Outlined.Dashboard" IconColor="Color.Primary">Dashboard</MudNavLink>
+            <MudNavLink Href="/viewstaffworklist" Icon="@Icons.Material.TwoTone.Category" IconColor="Color.Primary">View Work</MudNavLink>
+            <MudNavLink Href="/identity/account/logout" Icon="@Icons.Material.Filled.Logout" IconColor="Color.Primary">Logout</MudNavLink>
+        </AuthorizeView>
+    </MudNavMenu>
+</MudPaper>
+
+@code{
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private List<User> Getuser()
+    {
+        return _UserRepository.GetById(_parameters.UserId);
+    }
+}

@@ -1,0 +1,208 @@
+﻿@page "/inquiryform"
+@layout Website
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@using EMS.DB.Constant
+@inject ISnackbar Snackbar;
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject IInquiryRepository _InquiryRepository;
+@inject ICategoryServiceRepository _CategoryServiceRepository;
+@inject NavigationManager NavigationManager;
+
+<header>
+    <div class="container">
+        <!-- top header -->
+        <!-- nav -->
+        <nav class="py-3">
+            <div id="logo">
+                <h1>
+                    <a class="navbar-brand" href="index.html">
+                        <span class="fa fa-empire"></span>Event <span><span class="line"></span>Mentor</span>
+                    </a>
+                </h1>
+            </div>
+
+            <label for="drop" class="toggle"><span class="fa fa-bars"></span></label>
+            <input type="checkbox" id="drop" />
+            <ul class="menu mt-2">
+                <li class="mr-lg-3 mr-2 "><a href="/landingpage/index.html">Home</a></li>
+                <li class="mr-lg-3 mr-2"><a href="/landingpage/about.html">About Us</a></li>
+                <li class="mr-lg-3 mr-2"><a href="/landingpage/services.html">Services</a></li>
+                <li class="mr-lg-3 mr-2"><a href="/landingpage/gallery.html">Gallery</a></li>
+                <li><a href="/landingpage/contact.html">Contact</a></li>
+                <li><a href="https://localhost:44304/identity/account/login">Admin</a></li>
+            </ul>
+        </nav>
+        <!-- //nav -->
+    </div>
+</header>
+<!-- //header -->
+<!-- inner banner -->
+<div class="inner_banner layer" id="home">
+    <div class="container">
+        <div class="agileinfo-inner">
+            <h2 class="text-center text-white">
+                Inquiry Page
+            </h2>
+        </div>
+    </div>
+</div>
+
+<MudLayout>
+    <MudContainer>
+        <EditForm Model="@inquiryModel" OnValidSubmit="Save">
+            <DataAnnotationsValidator />
+            <MudCard Elevation="25" Class="m-3">
+                <MudCardContent>
+                    <MudItem>
+                        <MudTextField For="@(() => inquiryModel.Fullname)" @bind-Value="inquiryModel.Fullname" Label="Full Name" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.MobileNo)" @bind-Value="inquiryModel.MobileNo" Label="Mobile No" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.AltPhoneNo)" @bind-Value="inquiryModel.AltPhoneNo" Label="AltPhone No" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.Email)" @bind-Value="inquiryModel.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.AddressLine1)" @bind-Value="inquiryModel.AddressLine1" Label="AddressLine1" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.AddressLine2)" @bind-Value="inquiryModel.AddressLine2" Label="AddressLine2" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.Landmark)" @bind-Value="inquiryModel.Landmark" Label="Landmark" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.Pincode)" @bind-Value="inquiryModel.Pincode" Label="Pincode" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.City)" @bind-Value="inquiryModel.City" Label="city" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.State)" @bind-Value="inquiryModel.State" Label="State" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudTextField For="@(() => inquiryModel.NoOfAttendee)" @bind-Value="inquiryModel.NoOfAttendee" Label="No Of Attendee" Variant="Variant.Outlined" Margin="Margin.Normal"></MudTextField>
+                        <MudSelect @bind-Value="inquiryModel.EventCategoryId" For="@(() => inquiryModel.EventCategoryId)" T="long" Label="select categorys" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var eventCategory in EventCategoryList)
+                            {
+                                <MudSelectItem Value="@eventCategory.Id">@eventCategory.CategoryName</MudSelectItem>
+
+                            }
+                        </MudSelect>
+                        <MudRadioGroup @bind-SelectedOption="@inquiryModel.SlotType" For="@(() => inquiryModel.SlotType)">
+                            <MudText>Event time:</MudText>
+                            <MudRadio Option="@(EventSlotType.Morning.ToString())" Color="Color.Primary">@EventSlotType.Morning.ToString()</MudRadio>
+                            <MudRadio Option="@(EventSlotType.Evening.ToString())" Color="Color.Primary">@EventSlotType.Evening.ToString()</MudRadio>
+                            <MudRadio Option="@(EventSlotType.FullDay.ToString())" Color="Color.Primary">@EventSlotType.FullDay.ToString()</MudRadio>
+                            <MudRadio Option="@(EventSlotType.MultipleDay.ToString())" Color="Color.Primary">@EventSlotType.MultipleDay.ToString()</MudRadio>
+                        </MudRadioGroup>
+                        <MudDatePicker Variant="Variant.Outlined" For="@(() => inquiryModel.FromDate)" Label="From Date" @bind-Date="inquiryModel.FromDate" DateFormat="dd.MM.yyyy" />
+                        @if (inquiryModel.SlotType == "MultipleDay")
+                        {
+                            <MudDatePicker Variant="Variant.Outlined" Label="To Date" For="@(() => inquiryModel.ToDate)" @bind-Date="inquiryModel.ToDate" DateFormat="dd.MM.yyyy" />
+                        }
+                    </MudItem>
+                    <MudItem Class="d-flex justify-end m-3">
+                        <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelForm">
+                            <FontLabel Fontweight="500" FontColor="white">Cancel</FontLabel>
+                        </MudButton>
+                        <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary">
+                            <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                        </MudButton>
+                    </MudItem>
+                </MudCardContent>
+            </MudCard>
+        </EditForm>
+    </MudContainer>
+</MudLayout>
+<footer>
+    <div class="container py-5">
+        <div class="row footer-gap">
+            <div class="col-lg-4 col-sm-6">
+                <h3 class="text-capitalize mb-3">Address</h3>
+                <address class="mb-0">
+                    <p class=""><span class="fa fa-map-marker"></span> 437, Shiven Square, Nr. Blu Life, Adajan Gam, Surat, Gujarat, IN</p>
+                    <p><span class="fa fa-clock-o"></span> Timings : 10 a.m to 6 p.m</p>
+                    <p><span class="fa fa-phone"></span> +91 8401413132</p>
+                    <p><span class="fa fa-phone"></span> +91 9879899654</p>
+                    <p><span class="fa fa-phone"></span> +91 7575031029</p>
+                    <p><span class="fa fa-phone"></span> +91 9687423028</p>
+                    <p><span class="fa fa-envelope-open"></span> <a href="mailto:eventmentor3@gmail.com">eventmentor3@gmail.com</a></p>
+                </address>
+            </div>
+            <div class="col-lg-3 offset-lg-1 col-sm-6 mt-lg-0 mt-sm-5 mt-4">
+                <h3 class="text-capitalize mb-3"> Follow us</h3>
+                <p class="mb-4">Follow us on social media</p>
+                <ul class="social mt-lg-0 mt-3">
+                    <li class="mr-1"><a href="https://www.facebook.com/"><span class="fa fa-facebook"></span></a></li>
+                    <li class="mr-1"><a href="https://twitter.com/"><span class="fa fa-twitter"></span></a></li>
+                    <li class="mr-1"><a href="mailto:eventmentor3@gmail.com"><span class="fa fa-google-plus"></span></a></li>
+                    <li class="mr-1"><a href="https://www.linkedin.com/"><span class="fa fa-linkedin"></span></a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="copyright pb-5 text-center">
+        <p>© 2018 EventMentor. All Rights Reserved | Design by EventMentor</p>
+    </div>
+</footer>
+@code{
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private CategoryService ServiceModel = new();
+    private List<EventCategory> EventCategoryList = new();
+    private Inquiry inquiryModel = new();
+    private List<Inquiry> inquiryList = new();
+    private List<CategoryService> ServiceList = new();
+    private Event EventModel = new();
+    private HubConnection hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Inquiry>("InquiryAddUpdate", (inquirys) =>
+        {
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            inquiryModel.FromDate = DateTime.Today.AddDays(7);
+            GetEventCategoryList();
+            StateHasChanged();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    private void GetEventCategoryList()
+    {
+        EventCategoryList = _EventCategoryRepository.GetList();
+    }
+
+    private async Task Save()
+    {
+
+        try
+        {
+            _InquiryRepository.Insert(inquiryModel);
+            inquiryModel = new Inquiry();
+            await hubConnection.SendAsync("InquiryAddUpdate", inquiryModel);
+            Snackbar.Add(ToastrMessages.InquirySuccessEndUser, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private void ShowAddForm()
+    {
+        inquiryModel = new Inquiry();
+
+    }
+    private void CancelForm()
+    {
+
+        inquiryModel = new Inquiry();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+}

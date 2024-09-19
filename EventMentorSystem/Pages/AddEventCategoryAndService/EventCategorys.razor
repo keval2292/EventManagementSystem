@@ -1,0 +1,230 @@
+﻿@page "/eventcategorylist"
+@attribute [Authorize(Roles = "Admin, Operator")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@using System.Collections.Generic;
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using EventMentorSystem.Data
+@inject ISnackbar Snackbar;
+@inject IEventCategoryRepository _EventCategoryRepository;
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+@inject NavigationManager _NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<EditForm Model="@EventCategoryModel" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <MudCard Elevation="25" Class="my-2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6"><b>Add / Edit Category</b></MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudItem>
+                <MudTextField @bind-Value="EventCategoryModel.CategoryName" For="@(() => EventCategoryModel.CategoryName)" Label="Category Name" Variant="Variant.Outlined"  Margin="Margin.Normal"></MudTextField>
+            </MudItem>
+            <MudItem Class="d-flex justify-end">
+                <MudButton Class="mx-1" Variant="Variant.Filled" ButtonType="ButtonType.Submit" Color="Color.Primary" StartIcon="@Icons.Material.TwoTone.Add" Size="Size.Large">
+                    <FontLabel Fontweight="500" FontColor="white">Add</FontLabel>
+                </MudButton>
+            </MudItem>
+        </MudCardContent>
+    </MudCard>
+</EditForm>
+<MudTable Elevation="25" @ref="tableRef" T="EventCategory" ServerData="@(new Func<TableState, Task<TableData<EventCategory>>>(ServerReload))" Filter="new Func<EventCategory, bool>(Search)" @bind-customer="EventCategoryList">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6"><b>Categories</b></MudText>
+        <MudSpacer />
+        <MudTextField Value="searchString" T="string" ValueChanged="@(s => OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Id</MudTh>
+        <MudTh>Category Name</MudTh>
+        <MudTh>Action</MudTh>
+    </HeaderContent>
+    <RowTemplate Context="data">
+        <MudTd DataLabel="Id">@data.Id</MudTd>
+        <MudTd DataLabel="Category Name">@data.CategoryName</MudTd>
+        <MudTd DataLabel="">
+            <MudFab @onclick="@(()=>Edit(@data.Id))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+            <MudFab @onclick="@(()=>Delete(@data.Id))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 5,10,20,50}" />
+    </PagerContent>
+</MudTable>
+
+
+@code {
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private bool showLeaveAlert = false;
+    private EventCategory EventCategoryModel = new();
+    private NotificationMessages NotificationModel = new();
+    private List<EventCategory> EventCategoryList = new();
+    private string searchString = "";
+    private string error { get; set; }
+    private HubConnection hubConnection;
+    private string BoxCss = "none";
+    private string userid;
+    private string username;
+    private MudTable<EventCategory> tableRef;
+    private IEnumerable<EventCategory> pagedData;
+    private int totalItems;
+    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider
+          .GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            claims = user.Claims;
+            userid = user.FindFirst(c => c.Type == ClaimTypes.Sid)?.Value;
+            username = user.FindFirst(c => c.Type == ClaimTypes.Sid)?.Value;
+        }
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(_NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+
+        hubConnection.On<EventCategory>("CategoruAddUpdate", (eventCategory) =>
+        {
+            GetAll();
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<NotificationMessages>("SendMessage", (notificationMessages) =>
+        {
+
+        });
+        await hubConnection.StartAsync();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAll();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    private List<EventCategory> GetAll()
+    {
+        tableRef.ReloadServerData();
+        EventCategoryList = _EventCategoryRepository.GetList();
+        return EventCategoryList;
+    }
+    private async Task Save()
+    {
+        try
+        {
+            _EventCategoryRepository.InsertOrUpdate(EventCategoryModel);
+            await hubConnection.SendAsync("CategoruAddUpdate", EventCategoryModel);
+            Snackbar.Add(" record saved", Severity.Success);
+            showLeaveAlert = false;
+            tableRef.ReloadServerData();
+            EventCategoryModel = new EventCategory();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+
+    private async Task Edit(long id)
+    {
+        try
+        {
+            EventCategoryModel = EventCategoryList.FirstOrDefault(c => c.Id == id);
+            await hubConnection.SendAsync("CategoruAddUpdate", EventCategoryModel);
+            tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+
+    private async Task Delete(long id)
+    {
+        try
+        {
+            _EventCategoryRepository.Delete(id);
+            Snackbar.Add("Category Data Deleted.", Severity.Success);
+            await hubConnection.SendAsync("CategoruAddUpdate", EventCategoryModel);
+            NotificationModel.Message = $"{username} is delete category{id}.";
+            NotificationModel.Title = "delete category";
+            NotificationModel.UserId = userid;
+            await hubConnection.SendAsync("SendMessage", NotificationModel);
+            tableRef.ReloadServerData();
+            //GetAll();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private bool Search(EventCategory eventCategory)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(eventCategory.CategoryName)
+            && eventCategory.CategoryName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+
+    private async Task<TableData<EventCategory>> ServerReload(TableState state)
+    {
+        IEnumerable<EventCategory> data;
+
+        //get all data of current month
+        data = _EventCategoryRepository.GetList();
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItems = data.Count();
+
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<EventCategory>() { TotalItems = totalItems, Items = pagedData };
+    }
+
+
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
+

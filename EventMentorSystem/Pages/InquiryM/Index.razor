@@ -1,0 +1,215 @@
+﻿@page "/inquirylist"
+@attribute [Authorize(Roles = "Admin")]
+@using EMS.DB.Models
+@using  EMS.DB.Repository.Interface
+@inject NavigationManager NavigationManager; 
+@inject ISnackbar Snackbar;
+@inject IInquiryRepository _InquiryRepository;
+@inject IDialogService DialogService
+
+<AuthorizeView Roles="Admin" Context="data">
+    <Authorized>
+        <MudTable Elevation="25" @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<Inquiry>>>(ServerReload))" Filter="new Func<Inquiry, bool>(Search)" @bind-customer="inquiryList" HorizontalScrollbar="true" Breakpoint="Breakpoint.Sm" Class="my-2">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6"><b>Inquiries</b></MudText>
+                <MudSpacer />
+                <MudTextField Value="searchString" T="string" ValueChanged="@(s=> OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Action</MudTh>
+                <MudTh>Full Name</MudTh>
+                <MudTh>Contact(#AltPhone No)</MudTh>
+                @*<MudTh>AltPhone No</MudTh>*@
+                <MudTh>Email</MudTh>
+                <MudTh>Addressline</MudTh>
+                <MudTh>No Of Attendee</MudTh>
+                <MudTh>Slot Type</MudTh>
+                @*<MudTh>FromDate</MudTh>
+                    <MudTh>ToDate</MudTh>*@
+                <MudTh>Date</MudTh>
+                <MudTh>Additional Notes</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="">
+                    <MudFab @onclick="@(() => OpenDialog(context))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small">
+                        edit
+                    </MudFab>
+                    <MudFab @onclick="@(()=>Delete(context))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+                </MudTd>
+                <MudTd DataLabel="Event Name">@context.Fullname</MudTd>
+                <MudTd DataLabel="">@context.MobileNo @(string.Concat("(#", context.AltPhoneNo, ")"))</MudTd>
+                @*<MudTd DataLabel="">@context.AltPhoneNo</MudTd>*@
+                <MudTd DataLabel="">@context.Email</MudTd>
+                <MudTd DataLabel="">@context.AddressLine1 , @context.AddressLine2,@context.Landmark,@context.Pincode,@context.City,@context.State</MudTd>
+                <MudTd DataLabel="">@context.NoOfAttendee</MudTd>
+                <MudTd DataLabel="">@context.SlotType</MudTd>
+                @*<MudTd DataLabel="">@context.FromDate</MudTd>
+                    <MudTd DataLabel="">@context.ToDate</MudTd>*@
+                <MudTd DataLabel="">
+                    @context.FromDate?.ToLongDateString()
+                    @if (@context.ToDate.HasValue)
+                    {
+                        @(" To ")
+                        @context.ToDate?.ToLongDateString()
+                    }
+                </MudTd>
+                <MudTd DataLabel="">
+                    @if (context.Additionalnotes is not null)
+                    {
+                        @context.Additionalnotes
+                    }
+                    else
+                    {
+                        @("-----")
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </Authorized>
+    <NotAuthorized>
+        <MudAlert Severity="Severity.Error">please <MudLink Href="/login">login</MudLink></MudAlert>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code{
+    private string searchString = "";
+    private Inquiry inquiryModel = new();
+    private MudTable<Inquiry> tableRef;
+    private IEnumerable<Inquiry> pagedData;
+    private int totalItems;
+    private int totalItemsOperator;
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+
+    private List<Inquiry> inquiryList = new();
+    private string BoxCss = "none";
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetAllinquiry();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+    private HubConnection hubConnection;
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Inquiry>("InquiryAddUpdate", (inquirys) =>
+        {
+            tableRef.ReloadServerData();
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+
+    private List<Inquiry> GetAllinquiry()
+    {
+        inquiryList = _InquiryRepository.GetLists();
+        return inquiryList;
+    }
+
+    private bool Search(Inquiry inquiry)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(inquiry.Fullname)
+            && StringValid(inquiry.MobileNo)
+            && StringValid(inquiry.AltPhoneNo)
+            && StringValid(inquiry.Email)
+            && StringValid(inquiry.AddressLine1)
+            && StringValid(inquiry.Landmark)
+            && StringValid(inquiry.AddressLine2)
+            && StringValid(inquiry.Pincode)
+            && StringValid(inquiry.City)
+            && StringValid(inquiry.State)
+            && StringValid(inquiry.SlotType)
+            &&
+            inquiry.Fullname.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.MobileNo.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.AltPhoneNo.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.Email.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.AddressLine1.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.AddressLine2.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.Pincode.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.City.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.State.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || inquiry.SlotType.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            )
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TableData<Inquiry>> ServerReload(TableState state)
+    {
+        IEnumerable<Inquiry> data;
+
+        data = _InquiryRepository.GetLists();
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItemsOperator = data.Count();
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<Inquiry>() { TotalItems = totalItemsOperator, Items = pagedData };
+    }
+
+    private async Task Delete(Inquiry inquiryModel)
+    {
+        try
+        {
+            inquiryModel.IsActive=true;
+            _InquiryRepository.Insert(inquiryModel);
+            tableRef.ReloadServerData();
+            await hubConnection.SendAsync("InquiryAddUpdate", inquiryModel);
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private void OpenDialog(Inquiry inquiry)
+    {
+
+        var parameters = new DialogParameters();
+        parameters.Add("InquiryModel", inquiry);
+        parameters.Add("_parameters", _parameters);
+        var options = new DialogOptions()
+        {
+            CloseOnEscapeKey = false,
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            Position = DialogPosition.TopCenter,
+            DisableBackdropClick = true
+
+        };
+
+        DialogService.Show<AddInquiryDialog>("Edit Inquiry", parameters, options);
+
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+
+    }
+}

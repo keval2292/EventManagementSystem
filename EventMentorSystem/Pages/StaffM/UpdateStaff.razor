@@ -1,0 +1,222 @@
+﻿@page "/staffupdatelist"
+@attribute [Authorize(Roles = "Admin,Operator")]
+@using EMS.DB.Models
+@using EMS.DB.Repository.Interface
+@inject ISnackbar Snackbar;
+@inject IUserRepository _UserRepository;
+@inject IStaffRepository _StaffRepository;
+@inject ICategoryServiceRepository _CategoryServiceRepository;
+@inject IDialogService DialogService;
+@inject NavigationManager NavigationManager;
+
+        <MudTable Elevation="25"  @ref="tableRef" ServerData="@(new Func<TableState, Task<TableData<Staff>>>(ServerReload))" T="Staff"  Filter="new Func<Staff, bool>(Search)" @bind-customer="StaffList" HorizontalScrollbar="true"  Class="my-2">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6"><b>Staffs</b></MudText>
+                <MudSpacer />
+                <MudTextField Value="searchString" T="string" ValueChanged="@(s => OnSearch(s))" Immediate="true" Placeholder="Search For Here.." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" AdornmentColor="Color.Primary"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Action</MudTh>
+                <MudTh>Id</MudTh>
+                <MudTh>Staff Name</MudTh>
+                <MudTh>Staff Email</MudTh>
+                <MudTh>Staff Contact</MudTh>
+                <MudTh>Staff Service</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="">
+                    <MudFab @onclick="@(() => OpenDialog(context))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small">
+                        edit
+                    </MudFab>
+                    <MudFab @onclick="@(() => Delete(@context.Id))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+                </MudTd>
+                <MudTd DataLabel="">@context.Id </MudTd>
+                <MudTd DataLabel="">@context.User.FullName</MudTd>
+                <MudTd DataLabel="">@context.User.Email</MudTd>
+                <MudTd DataLabel="">@context.User.ContactNo</MudTd>
+                @if (context.StaffService > 0)
+                {
+                    foreach (var data in GetAll())
+                    {
+                        if (data.Id == context.StaffService)
+                        {
+                            <MudTd DataLabel="">@data.ServiceName</MudTd>
+                        }
+                    }
+                }
+                else
+                {
+                    <MudTd DataLabel="">Not Selected yet.</MudTd>
+                }
+            </RowTemplate>
+        </MudTable>
+
+@code{
+    [CascadingParameter(Name = "cascadeParameters")]
+    public GlobalParameter _parameters { get; set; }
+    private string searchString = "";
+    private User userModel = new();
+    private Staff StaffModel = new();
+    private List<CategoryService> Servicelist = new();
+    private List<Staff> StaffList = new();
+    private List<User> userList = new();
+    private MudTable<Staff> tableRef;
+    private IEnumerable<Staff> pagedData;
+    private int totalItems;
+    private HubConnection hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<Staff>("staffAddUpdate", (staffs) =>
+        {
+            GetAllUser();
+            if (tableRef is not null)
+            {
+
+                tableRef.ReloadServerData();
+            }
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+    private List<CategoryService> GetAll()
+    {
+        Servicelist = _CategoryServiceRepository.GetList();
+        return Servicelist;
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+
+            GetAllstaff();
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+
+    private List<Staff> GetAllstaff()
+    {
+        StaffList = _StaffRepository.GetList();
+        return StaffList;
+    }
+    private List<User> GetAllUser()
+    {
+        userList = _UserRepository.GetAllUser();
+        return userList;
+    }
+
+    private bool Search(Staff Staffs)
+    {
+        if (string.IsNullOrEmpty(searchString) || !string.IsNullOrEmpty(searchString)
+            && StringValid(Staffs.User.UserName)
+            && StringValid(Staffs.User.Email)
+            && StringValid(Staffs.User.ContactNo)
+            &&
+            Staffs.User.Id.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || Staffs.User.UserName.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || Staffs.User.Email.Contains(searchString, StringComparison.OrdinalIgnoreCase)
+            || Staffs.User.ContactNo.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        tableRef.ReloadServerData();
+    }
+
+
+    private async Task<TableData<Staff>> ServerReload(TableState state)
+    {
+        IEnumerable<Staff> data;
+
+        //get all data of current month
+        data = _StaffRepository.GetList();
+
+        data = data.Where(selectedModel => { return Search(selectedModel); }).ToArray();
+        totalItems = data.Count();
+
+        pagedData = data.Skip(state.Page * state.PageSize).Take(state.PageSize).ToArray();
+        return new TableData<Staff>() { TotalItems = totalItems, Items = pagedData };
+    }
+
+    private bool StringValid(string strValue)
+    {
+        if (!string.IsNullOrEmpty(strValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+
+    private void ShowAddForm()
+    {
+        userModel = new User();
+
+    }
+
+    private void Edit(long id)
+    {
+        try
+        {
+            StaffModel = StaffList.FirstOrDefault(c => c.Id == id);
+            tableRef.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+
+    private void CancelForm()
+    {
+
+        userModel = new User();
+    }
+
+    private async Task Delete(long id)
+    {
+        try
+        {
+            _StaffRepository.Delete(id);
+            tableRef.ReloadServerData();
+            await hubConnection.SendAsync("staffAddUpdate", StaffModel);
+
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void OpenDialog(Staff staff)
+    {
+
+        var parameters = new DialogParameters();
+        parameters.Add("staffModel", staff);
+        parameters.Add("_parameters", _parameters);
+        var options = new DialogOptions()
+        {
+            CloseOnEscapeKey = false,
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            Position = DialogPosition.TopCenter,
+            DisableBackdropClick = true
+
+        };
+        DialogService.Show<AddStaffDialog>("AddStaffDialog", parameters, options);
+    }
+}

@@ -1,0 +1,129 @@
+﻿@using EMS.DB.Models
+@using EMS.DB.Constant
+@using  EMS.DB.Repository.Interface
+@inject IEventStaffWorkRepository _EventStaffWorkRepository;
+@inject IEventRepository _EventRepository;
+@inject INotificationMessagesRepository _NotificationMessagesRepository;
+@inject ISnackbar Snackbar;
+@inject NavigationManager NavigationManager;
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem lg="8" md="8" xs="12">
+                <MudSelect Margin="Margin.Dense" T="String" @bind-Value="@eventStaffWorkModel.Status" Label="Status" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@(Status.pending.ToString())" />
+                    <MudSelectItem Value="Status.OnProcess.ToString()" />
+                    <MudSelectItem Value="Status.Finish.ToString()" />
+                </MudSelect>
+            </MudItem>
+            <MudItem lg="4" md="4" xs="12">
+                <MudButton Color="Color.Primary" OnClick="update" Variant="Variant.Filled">Change</MudButton>
+            </MudItem>
+            <MudItem lg="12" md="12" xs="12">
+                <MudTimeline TimelineOrientation="TimelineOrientation.Horizontal" TimelinePosition="TimelinePosition.Top">
+                    <MudTimelineItem Color="Color.Error" Elevation="25">
+                        <ItemContent>
+                            <MudPaper Elevation="0" Class="mt-n1">
+                                @if (eventStaffWorkModel.Status == Status.pending.ToString())
+                                {
+                                    <MudAlert Severity="Severity.Error">@eventStaffWorkModel.Status</MudAlert>
+                                }
+                            </MudPaper>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Warning" Elevation="25" TimelineAlign="TimelineAlign.End">
+
+                        <ItemContent>
+                            <MudPaper Elevation="0" Class="mt-n1">
+                                @if (eventStaffWorkModel.Status == Status.OnProcess.ToString())
+                                {
+                                    <MudAlert Severity="Severity.Warning">@eventStaffWorkModel.Status</MudAlert>
+                                }
+                            </MudPaper>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Success" Elevation="25">
+                        <ItemContent>
+                            <MudPaper Elevation="0" Class="mt-n1">
+                                @if (eventStaffWorkModel.Status == Status.Finish.ToString())
+                                {
+                                    <MudAlert Severity="Severity.Success">@eventStaffWorkModel.Status</MudAlert>
+                                }
+                            </MudPaper>
+                        </ItemContent>
+                    </MudTimelineItem>
+                </MudTimeline>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public EventStaffWork EventStaffWorkModel { get; set; } = new EventStaffWork();
+    private EventStaffWork eventStaffWorkModel = new();
+    [Parameter] public string userId { get; set; }
+    [Parameter] public GlobalParameter _parameters { get; set; }
+    public NotificationMessages NotificationMessagesModel { get; set; } = new NotificationMessages();
+    public HubConnection hubConnection;
+    public Event eventname = new();
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
+        .Build();
+        hubConnection.On<EventStaffWork>("WorkAddUpdate", (EventStaffWorks) =>
+        {
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+
+    }
+
+    protected override void OnInitialized()
+    {
+        eventStaffWorkModel = EventStaffWorkModel;
+        base.OnInitialized();
+    }
+    public void GetEvent(long id)
+    {
+        eventname = _EventRepository.GetById(id);
+    }
+    private async Task update()
+    {
+        try
+        {
+            _EventStaffWorkRepository.Update(eventStaffWorkModel);
+            Snackbar.Add("Event work status change", Severity.Success);
+            GetEvent(eventStaffWorkModel.EventId);
+            NotificationMessagesModel.Message = $"{_parameters.LoggedInUser.FullName} has change Event {eventname.EventName} Status.";
+            NotificationMessagesModel.Title = "Edit Event Status";
+            NotificationMessagesModel.UserId = userId;
+            NotificationMessagesModel.EventId = EventStaffWorkModel.EventId;
+            await _NotificationMessagesRepository.InsertAsync(NotificationMessagesModel);
+            await _parameters.hubConnection.SendAsync("SendMessage", NotificationMessagesModel);
+            await hubConnection.SendAsync("WorkAddUpdate", EventStaffWorkModel);
+            eventStaffWorkModel = new EventStaffWork();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _parameters.ShowErrorMessages(ex);
+        }
+    }
+    private void CancelForm()
+    {
+        eventStaffWorkModel = new EventStaffWork();
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
